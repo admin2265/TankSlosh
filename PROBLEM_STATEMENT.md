@@ -60,7 +60,7 @@ The model must run far faster than CFD and serve as a sanity check on StarCCM+ r
 
 ## Modelling approach
 1. **Level A (done):** the runtime model, a fixed mass plus spring-mass oscillators, read from a table against fill fraction.
-2. **Level B (next):** the diaphragm model.
+2. **Level B:** the diaphragm model. The static shape step is done; see [docs/diaphragm_statics.md](docs/diaphragm_statics.md).
    - Find the diaphragm's static shape at each fill level: an axisymmetric neo-Hookean shell with a volume constraint, frictionless wall contact and dome inversion.
    - Compute its small m = 0 and m = 1 vibration modes coupled to potential flow in the liquid.
    - Convert those modes into Level A oscillator parameters over the 5–95 % fill range.
