@@ -24,6 +24,9 @@ from dataclasses import dataclass
 import numpy as np
 
 
+_G2 = (0.5 - 0.5 / np.sqrt(3.0), 0.5 + 0.5 / np.sqrt(3.0))
+
+
 def _wrap(a):
     return (a + np.pi) % (2 * np.pi) - np.pi
 
@@ -35,7 +38,13 @@ class ShellState:
 
 
 class AxisymmetricShell:
-    def __init__(self, r0, z0, shear_modulus: float, thickness: float, nu: float = 0.5):
+    def __init__(self, r0, z0, shear_modulus: float, thickness: float, nu: float = 0.5,
+                 material: str = "neo-hookean", youngs_modulus: float = None,
+                 bending: bool = True):
+        """material: "neo-hookean" (incompressible, uses shear_modulus) or "linear"
+        (small-strain linear-elastic membrane, energy E t/(2(1-nu^2)) (e1^2 + e2^2 +
+        2 nu e1 e2) per molded area with e = stretch - 1; uses youngs_modulus and nu).
+        bending=False drops the bending energy (pure membrane)."""
         r0 = np.asarray(r0, dtype=float)
         z0 = np.asarray(z0, dtype=float)
         if r0.shape != z0.shape or r0.ndim != 1 or len(r0) < 3:
@@ -43,9 +52,23 @@ class AxisymmetricShell:
         if abs(r0[-1]) > 1e-12:
             raise ValueError("last node must lie on the axis (r = 0)")
         self.r0, self.z0 = r0, z0
+        if material not in ("neo-hookean", "linear"):
+            raise ValueError("material must be 'neo-hookean' or 'linear'")
+        self.material = material
+        if material == "linear":
+            if youngs_modulus is None:
+                raise ValueError("linear material needs youngs_modulus")
+            self.E = youngs_modulus
+            shear_modulus = youngs_modulus / (2 * (1 + nu))
         self.mu, self.t, self.nu = shear_modulus, thickness, nu
-        self.D = shear_modulus * thickness ** 3 / 3.0 if nu == 0.5 else \
-            2 * shear_modulus * (1 + nu) * thickness ** 3 / (12 * (1 - nu ** 2))
+        if material == "linear":
+            self.D = self.E * thickness ** 3 / (12 * (1 - nu ** 2))
+        else:
+            self.D = shear_modulus * thickness ** 3 / 3.0 if nu == 0.5 else \
+                2 * shear_modulus * (1 + nu) * thickness ** 3 / (12 * (1 - nu ** 2))
+        if not bending:
+            self.D = 0.0
+        self.gravity = None
         self.N = len(r0) - 1
 
         dr, dz = np.diff(r0), np.diff(z0)
@@ -53,6 +76,8 @@ class AxisymmetricShell:
         self.rm0 = 0.5 * (r0[:-1] + r0[1:])
         self.A0_seg = 2 * np.pi * self.rm0 * self.L0
         self.c_mem = 0.5 * self.mu * self.t * self.A0_seg
+        if material == "linear":
+            self.c_lin = 0.5 * self.E * self.t / (1 - nu ** 2) * self.A0_seg
         self.theta_clamp = np.arctan2(dz[0], -dr[0])
         # node lengths and areas for bending
         s0 = np.empty(self.N + 1)
@@ -94,9 +119,30 @@ class AxisymmetricShell:
     def tensions(self, r, z):
         """Meridional and hoop membrane tensions (N/m, per current length) per segment."""
         l1, l2 = self.stretches(r, z)
+        if self.material == "linear":
+            c = self.E * self.t / (1 - self.nu ** 2)
+            e1, e2 = l1 - 1, l2 - 1
+            return c * (e1 + self.nu * e2) / l2, c * (e2 + self.nu * e1) / l1
         T1 = self.mu * self.t * (l1 / l2 - 1.0 / (l1 ** 3 * l2 ** 3))
         T2 = self.mu * self.t * (l2 / l1 - 1.0 / (l1 ** 3 * l2 ** 3))
         return T1, T2
+
+    def set_gravity(self, g: float, rho_liquid: float, rho_shell: float):
+        """Include gravity along -z: hydrostatic liquid below the diaphragm (potential
+        rho_liquid g int z dV of the liquid) and the diaphragm's own weight."""
+        self.gravity = (g, rho_liquid, rho_shell * self.t * self.A0_node)
+
+    def _membrane(self, l1, l2):
+        """Per-segment membrane energy and its derivatives w.r.t. the stretches."""
+        if self.material == "linear":
+            e1, e2 = l1 - 1, l2 - 1
+            c = self.c_lin
+            W = c * (e1 * e1 + e2 * e2 + 2 * self.nu * e1 * e2)
+            return W, 2 * c * (e1 + self.nu * e2), 2 * c * (e2 + self.nu * e1)
+        inv = 1.0 / (l1 * l1 * l2 * l2)
+        c = self.c_mem
+        return (c * (l1 * l1 + l2 * l2 + inv - 3.0), c * (2 * l1 - 2 * inv / l1),
+                c * (2 * l2 - 2 * inv / l2))
 
     # ---------- energy and gradient ----------
     def energy(self, r, z, grad: bool = False):
@@ -106,8 +152,8 @@ class AxisymmetricShell:
         l1 = L / self.L0
         rm = 0.5 * (r[:-1] + r[1:])
         l2 = rm / self.rm0
-        inv = 1.0 / (l1 * l1 * l2 * l2)
-        Um = np.sum(self.c_mem * (l1 * l1 + l2 * l2 + inv - 3.0))
+        Wm, dW_dl1, dW_dl2 = self._membrane(l1, l2)
+        Um = np.sum(Wm)
 
         a = k1 - self.k1_ref
         b = k2 - self.k2_ref
@@ -115,6 +161,9 @@ class AxisymmetricShell:
         ub = 0.5 * D * A * (a * a + b * b + 2 * nu * a * b)
         ub[-1] = 0.5 * D * A[-1] * (2 + 2 * nu) * a[-1] ** 2
         U = Um + ub.sum()
+        if self.gravity is not None:
+            g, rho_l, m_nodes = self.gravity
+            U = U - rho_l * g * self.enclosed_zmoment(r, z) + g * float(m_nodes @ z)
         if not grad:
             return U
 
@@ -122,8 +171,6 @@ class AxisymmetricShell:
         gr = np.zeros(N + 1)
         gz = np.zeros(N + 1)
         # membrane
-        dW_dl1 = self.c_mem * (2 * l1 - 2 * inv / l1)
-        dW_dl2 = self.c_mem * (2 * l2 - 2 * inv / l2)
         dW_dL = dW_dl1 / self.L0
         g_dr = dW_dL * dr / L
         g_dz = dW_dL * dz / L
@@ -161,7 +208,34 @@ class AxisymmetricShell:
         gr[:-1] -= g_th * dth_ddr
         gz[1:] += g_th * dth_ddz
         gz[:-1] -= g_th * dth_ddz
+        if self.gravity is not None:
+            g, rho_l, m_nodes = self.gravity
+            _, zr, zz = self.enclosed_zmoment(r, z, grad=True)
+            gr -= rho_l * g * zr
+            gz += -rho_l * g * zz + g * m_nodes
         return U, gr, gz
+
+    @staticmethod
+    def enclosed_zmoment(r, z, grad: bool = False):
+        """First moment int z dV of the region between the diaphragm and the clamp
+        plane (same sign convention as enclosed_volume)."""
+        ra, rb, za, zb = r[:-1], r[1:], z[:-1], z[1:]
+        dz = zb - za
+        val = 0.0
+        if grad:
+            gr = np.zeros_like(r)
+            gz = np.zeros_like(z)
+        for t in _G2:
+            rg = ra + t * (rb - ra)
+            zg = za + t * dz
+            val = val - np.pi * 0.5 * np.sum(rg * rg * zg * dz)
+            if grad:
+                c = -np.pi * 0.5
+                gr[:-1] += c * 2 * rg * zg * dz * (1 - t)
+                gr[1:] += c * 2 * rg * zg * dz * t
+                gz[:-1] += c * (rg * rg * (1 - t) * dz - rg * rg * zg)
+                gz[1:] += c * (rg * rg * t * dz + rg * rg * zg)
+        return (val, gr, gz) if grad else val
 
     # ---------- volume ----------
     @staticmethod

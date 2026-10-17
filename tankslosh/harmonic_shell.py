@@ -87,6 +87,9 @@ class HarmonicShell:
         cr = np.cross(t_prev, t_next)
         kss = np.arctan2(-np.sum(cr * eh, -1), np.sum(t_prev * t_next, -1)) / self.sh.s0[:, None]
         tav = t_prev + t_next
+        # at the clamp the axisymmetric model takes the normal from the first segment
+        # alone (not the bisector with the clamped tangent); match it exactly
+        tav[0] = t_next[0]
         n = _unit(np.cross(tav, eh))
         dp2 = np.sum(dpi * dpi, -1)
         ktt = np.zeros_like(kss)
@@ -110,7 +113,16 @@ class HarmonicShell:
         a = (pk - pj) / sh.L0[:, None, None]
         b = 0.5 * (dpj + dpk) / sh.rm0[:, None, None]
         aa, bb, ab = np.sum(a * a, -1), np.sum(b * b, -1), np.sum(a * b, -1)
-        W = 0.5 * sh.mu * sh.t * (aa + bb + 1.0 / (aa * bb - ab * ab) - 3.0)
+        det = aa * bb - ab * ab
+        if sh.material == "linear":
+            # principal stretches enter only through S = l1 + l2 and P = l1 l2
+            P = np.sqrt(det)
+            S = np.sqrt(aa + bb + 2 * P)
+            sq = S * S - 2 * P - 2 * S + 2          # e1^2 + e2^2
+            pr = P - S + 1                          # e1 e2
+            W = 0.5 * sh.E * sh.t / (1 - sh.nu ** 2) * (sq + 2 * sh.nu * pr)
+        else:
+            W = 0.5 * sh.mu * sh.t * (aa + bb + 1.0 / det - 3.0)
         return W.mean(-1) * sh.A0_seg
 
     def bending_local(self, V):
@@ -137,6 +149,26 @@ class HarmonicShell:
             tot = tot + 0.5 * np.sum(X * np.cross(Xs, Xt), -1)
         return (2 * np.pi / 3) * tot.mean(-1)
 
+    def zmoment_local(self, V):
+        """First moment int z dV of the strip region (divergence form, same closure
+        as volume_local), (N,)."""
+        pj, dpj, _ = self.positions(self.r[:-1], self.z[:-1], V[:, 0], V[:, 1], V[:, 2])
+        pk, dpk, _ = self.positions(self.r[1:], self.z[1:], V[:, 3], V[:, 4], V[:, 5])
+        Xs = pk - pj
+        tot = 0.0
+        for g in _GAUSS2:
+            X = (1 - g) * pj + g * pk
+            Xt = (1 - g) * dpj + g * dpk
+            tot = tot + 0.5 * 0.5 * X[..., 2] ** 2 * np.cross(Xs, Xt)[..., 2]
+        return 2 * np.pi * tot.mean(-1)
+
+    def enclosed_zmoment(self, u=None):
+        u = np.zeros(3 * (self.N + 1)) if u is None else u
+        U = u.reshape(-1, 3)
+        V = np.hstack([U[:-1], U[1:]])
+        disc = 0.5 * self.z[0] ** 2 * np.pi * self.r[0] ** 2
+        return float(self.zmoment_local(V).sum() + disc)
+
     def enclosed_volume(self, u=None):
         """3D enclosed volume V_d for a full DOF vector u (3(N+1),)."""
         u = np.zeros(3 * (self.N + 1)) if u is None else u
@@ -154,33 +186,46 @@ class HarmonicShell:
         Vb = np.hstack([U[np.clip(i - 1, 0, N)], U, U[np.clip(i + 1, 0, N)]])
         Vb[0, :3] = 0.0
         Vb[-1, 6:] = 0.0
-        return float(self.membrane_local(Vm).sum() + self.bending_local(Vb).sum())
+        U_el = float(self.membrane_local(Vm).sum() + self.bending_local(Vb).sum())
+        if self.sh.gravity is not None:   # rubber weight is linear in u_z cos t: no m = 1 term
+            g, rho_l, m_nodes = self.sh.gravity
+            U_el += -rho_l * g * self.enclosed_zmoment(u) + g * float(m_nodes @ self.z)
+        return U_el
 
     # ---------- Hessians ----------
     @staticmethod
     def _local_hessian(f, n_el, n_loc, h):
+        """Central-difference Hessians of the local energies, Richardson-extrapolated
+        (steps h and 2h) to remove the O(h^2) error. That error matters for slack
+        membranes, whose stretching energy is quartic in the deflection."""
         H = np.zeros((n_el, n_loc, n_loc))
         base = np.zeros((n_el, n_loc))
         for k in range(n_loc):
             for l in range(k, n_loc):
-                def ev(sk, sl):
-                    V = base.copy()
-                    V[:, k] += sk * h
-                    V[:, l] += sl * h
-                    return f(V)
-                val = (ev(1, 1) - ev(1, -1) - ev(-1, 1) + ev(-1, -1)) / (4 * h * h)
+                def d2(step):
+                    def ev(sk, sl):
+                        V = base.copy()
+                        V[:, k] += sk * step
+                        V[:, l] += sl * step
+                        return f(V)
+                    return (ev(1, 1) - ev(1, -1) - ev(-1, 1) + ev(-1, -1)) / (4 * step * step)
+                val = (4 * d2(h) - d2(2 * h)) / 3
                 H[:, k, l] = val
                 H[:, l, k] = val
         return H
 
     def hessians(self, h: float = 1e-6):
-        """Global Hessians (3(N+1) square) of the shell energy and of V_d."""
+        """Global Hessians (3(N+1) square) of the potential energy (shell, plus the
+        hydrostatic liquid term if gravity is set) and of V_d."""
         N = self.N
         n = 3 * (N + 1)
         HU = np.zeros((n, n))
         HV = np.zeros((n, n))
         Hm = self._local_hessian(self.membrane_local, N, 6, h)
         Hv = self._local_hessian(self.volume_local, N, 6, h)
+        if self.sh.gravity is not None:
+            g, rho_l, _ = self.sh.gravity
+            Hm = Hm - rho_l * g * self._local_hessian(self.zmoment_local, N, 6, h)
         for j in range(N):
             idx = np.arange(3 * j, 3 * j + 6)
             HU[np.ix_(idx, idx)] += Hm[j]

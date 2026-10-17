@@ -195,10 +195,21 @@ class ShellStaticSolver:
 class DiaphragmStatics:
     """Static diaphragm shapes for a molded cup diaphragm in an elliptical-head tank."""
 
-    def __init__(self, diaphragm: MoldedCupDiaphragm = BASELINE_DIAPHRAGM, n_segments: int = 100):
+    def __init__(self, diaphragm=BASELINE_DIAPHRAGM, n_segments: int = 100, gravity=None):
+        """diaphragm: MoldedCupDiaphragm or MeridianDiaphragm (its own points are used,
+        n_segments is then ignored). gravity: None (orbit) or (g, liquid density)."""
         self.d = diaphragm
-        r0, z0 = cup_reference_meridian(diaphragm, n_segments)
-        self.shell = AxisymmetricShell(r0, z0, diaphragm.shear_modulus, diaphragm.thickness)
+        if hasattr(diaphragm, "r0"):
+            r0, z0 = np.asarray(diaphragm.r0, float), np.asarray(diaphragm.z0, float)
+            self.shell = AxisymmetricShell(
+                r0, z0, diaphragm.shear_modulus, diaphragm.thickness, nu=diaphragm.poisson,
+                material=diaphragm.material, youngs_modulus=diaphragm.youngs_modulus,
+                bending=diaphragm.bending)
+        else:
+            r0, z0 = cup_reference_meridian(diaphragm, n_segments)
+            self.shell = AxisymmetricShell(r0, z0, diaphragm.shear_modulus, diaphragm.thickness)
+        if gravity is not None:
+            self.shell.set_gravity(gravity[0], gravity[1], diaphragm.density)
         self.solver = ShellStaticSolver(self.shell, WallContact(diaphragm.tank))
         # Measure fill changes from the discretized molded volume, so the
         # stress-free fill is exactly stress-free on this mesh.

@@ -125,12 +125,29 @@ def _liquid_region(ds: DiaphragmStatics, sol: StaticSolution, h_mesh: float,
     cont = ds.solver.contact
     contact = set(int(i) for i in sol.contact_nodes)
     gap = 0.5 * tank.radius * np.maximum(cont.g(sol.r, sol.z), 0.0)
+    # a node only counts as resting on the wall if it touches it, or if it is within
+    # gap_tol AND the diaphragm runs along the wall there (segment nearly parallel to
+    # it); a node that is merely close to the clamp of a diaphragm leaving the wall
+    # steeply must stay free, or the result depends on the mesh
+    gr_, gz_ = cont.dg(sol.r, sol.z)
+    nw = np.column_stack([gr_, gz_])
+    nw /= np.maximum(np.linalg.norm(nw, axis=1, keepdims=True), 1e-30)
+    seg = np.diff(np.column_stack([sol.r, sol.z]), axis=0)
+    seg /= np.linalg.norm(seg, axis=1, keepdims=True)
+    along_prev = np.ones(N + 1, dtype=bool)          # segment (k-1, k) runs along the wall
+    along_prev[1:] = np.abs(np.sum(seg * nw[1:], 1)) < np.sin(np.radians(20.0))
+    along_next = np.ones(N + 1, dtype=bool)          # segment (k, k+1) runs along the wall
+    along_next[:-1] = np.abs(np.sum(seg * nw[:-1], 1)) < np.sin(np.radians(20.0))
+
+    def resting(k, along):
+        return k in contact or (gap[k] < gap_tol and along[k])
+
     k_det = 0
-    while k_det + 1 < N and gap[k_det + 1] < gap_tol:
+    while k_det + 1 < N and resting(k_det + 1, along_prev):
         k_det += 1
     k_end = N
     if gap[N] < gap_tol and N in contact:
-        while k_end - 1 > k_det + 1 and gap[k_end - 1] < gap_tol:
+        while k_end - 1 > k_det + 1 and resting(k_end - 1, along_next):
             k_end -= 1
     contact |= set(range(1, k_det + 1))
     if k_end < N:
@@ -167,11 +184,18 @@ def _wall_rows(ds, sol, contact, n_per_node, ir, iz):
     return rows
 
 
+def _check_gravity_fluid(shell, fluid):
+    if shell.gravity is not None and abs(shell.gravity[1] - fluid.density) > 1e-9 * fluid.density:
+        raise ValueError(f"liquid density for gravity ({shell.gravity[1]}) differs from the "
+                         f"fluid passed to the modal analysis ({fluid.density})")
+
+
 def lateral_modes(ds: DiaphragmStatics, sol: StaticSolution, fluid: Fluid = WATER_20C,
                   h_mesh: float = 0.005, n_theta: int = 8,
                   gap_tol: float = 2e-3) -> LateralModes:
     sh, tank, N = ds.shell, ds.d.tank, ds.shell.N
     rho = fluid.density
+    _check_gravity_fluid(sh, fluid)
     hs = HarmonicShell(sh, sol.r, sol.z, n_theta)
     HU, HV = hs.hessians()
     K = HU - (-sol.dp) * HV
@@ -278,6 +302,7 @@ def axial_modes(ds: DiaphragmStatics, sol: StaticSolution, fluid: Fluid = WATER_
     (u_r, u_z). The incompressible liquid makes the motion volume-preserving."""
     sh, tank, N = ds.shell, ds.d.tank, ds.shell.N
     rho = fluid.density
+    _check_gravity_fluid(sh, fluid)
     HU, HV = axisymmetric_hessians(sh, sol.r, sol.z)
     K = HU - (-sol.dp) * HV
     m_nodes = ds.d.density * sh.t * sh.A0_node

@@ -38,15 +38,20 @@ It takes about 1.5 min and writes `examples/output/baseline_emm.json`, which hol
 
 The free-surface check also independently confirms the spring-mass height convention used in Level A.
 
-**Mesh convergence, first mode** (diaphragm segments 50 / 100 / 150):
+**Mesh convergence, first lateral mode** (diaphragm segments; after the wall-contact fix in [model_options.md](model_options.md#fixes-found-while-building-these-checks-affect-all-runs)):
 
-| Fill | 50 segments | 100 segments | 150 segments |
-|---|---|---|---|
-| 10 % | 6.08 Hz | 6.08 Hz | 6.18 Hz |
-| 55 % | 1.10 Hz | 1.12 Hz | 1.12 Hz |
-| 90 % | 4.61 Hz | 6.10 Hz | 5.91 Hz |
+| Fill | 50 | 100 (table) | 150 | 200 |
+|---|---|---|---|---|
+| 10 % | 6.08 Hz | 6.08 Hz | 6.18 Hz | |
+| 55 % | 1.10 Hz | 1.12 Hz | 1.12 Hz | |
+| 80 % | 4.11 Hz | 5.33 Hz | 5.42 Hz | 5.61 Hz |
+| 90 % | 4.61 Hz | 5.44 Hz | 5.91 Hz | 5.90 Hz |
+| 95 % | | 6.09 Hz | | 6.10 Hz |
 
-Slosh mass agrees within 1 % in every case. The liquid mesh size changes results by less than 0.05 %. Expect about ±2 % on frequency below 60 % fill and about ±5 % at high fill, where the tight rolling fold needs fine resolution.
+- **Slosh mass:** agrees within about 1 % at every mesh. The liquid mesh size changes results by less than 0.05 %.
+- **Frequency below 60 % fill:** expect about ±2 % from the 100-segment table.
+- **Frequency at 80–90 % fill:** the table reads up to about 8 % low, because the tight rolling fold needs 150–200 segments. Use `DiaphragmStatics(n_segments=200)` for final high-fill numbers.
+- **Axial modes:** converged within about 2 % at all fills.
 
 ## Results (μ = 1.8 MPa assumed; ζ is a placeholder 0.02)
 | Fill | f₁ [Hz] | m₁ [% contents] | h₁ [m] | Next significant modes |
@@ -62,7 +67,7 @@ Slosh mass agrees within 1 % in every case. The liquid mesh size changes results
 | 65 % | **2.99** | 26 | 0.20 | |
 | 70 % | 5.71 | 26 | 0.23 | 11.5 Hz (3 %) |
 | 80 % | 5.33 | 22 | 0.28 | 10.4 Hz (5 %) |
-| 90 % | 6.10 | 18 | 0.33 | 9.1 Hz (10 %) |
+| 90 % | 5.44 (5.90 at 200 seg.) | 17 | 0.32 | 9.0 Hz (8 %) |
 | 95 % | 6.09 | 18 | 0.36 | 8.7 Hz (12 %) |
 
 The full table is in `examples/output/slosh_modes.csv`.
@@ -101,7 +106,7 @@ Axial acceleration excites only axisymmetric motion. Each node moves by (u_r, u_
 | 50 % | 8.3 Hz (1.1 %) | 11.7 Hz (1.0 %) |
 | 55 % | 10.1 Hz (0.3 %) | 127 Hz (1.0 %) |
 | 70 % | 8.6 Hz (1.7 %) | 14.8 Hz (0.8 %) |
-| 90 % | 7.2 Hz (1.7 %) | 10.3 Hz (2.2 %) |
+| 90 % | 7.0 Hz (1.9 %) | 10.1 Hz (2.0 %) |
 
 Percentages are slosh mass as a share of the contents.
 

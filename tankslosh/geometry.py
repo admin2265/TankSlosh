@@ -124,6 +124,40 @@ class MoldedCupDiaphragm:
         return self.density * self.thickness * (dome_area + side_area)
 
 
+@dataclass
+class MeridianDiaphragm:
+    """Diaphragm given by its molded (stress-free) mid-surface meridian, as points
+    from the clamp (on the tank wall) to the axis (r = 0)."""
+    tank: EllipticalHeadTank
+    r0: np.ndarray
+    z0: np.ndarray
+    stress_free_fill: float
+    thickness: float
+    density: float
+    shear_modulus: float = None       # neo-Hookean
+    youngs_modulus: float = None      # linear
+    poisson: float = 0.5
+    material: str = "neo-hookean"
+    bending: bool = True
+
+    @property
+    def clamp_z(self) -> float:
+        return float(self.z0[0])
+
+
+def hemisphere_diaphragm(tank: EllipticalHeadTank, n_segments: int = 100, **kw) -> MeridianDiaphragm:
+    """Diaphragm molded to the upper head of the tank, clamped at the top of the
+    straight section; stress-free when the tank is full (Utsumi 2022 layout)."""
+    a, b, zt = tank.radius, tank.head_depth, tank.straight_top
+    t = np.linspace(0, np.pi / 2, 4001)
+    ds = np.hypot(a * np.sin(t), b * np.cos(t))
+    s = np.concatenate([[0], np.cumsum(0.5 * (ds[1:] + ds[:-1]) * np.diff(t))])
+    ti = np.interp(np.linspace(0, s[-1], n_segments + 1), s, t)
+    r0, z0 = a * np.cos(ti), zt + b * np.sin(ti)
+    r0[-1] = 0.0
+    return MeridianDiaphragm(tank=tank, r0=r0, z0=z0, stress_free_fill=1.0, **kw)
+
+
 BASELINE_TANK = EllipticalHeadTank(radius=0.2, height=0.6, head_ratio=2.0)
 BASELINE_DIAPHRAGM = MoldedCupDiaphragm(tank=BASELINE_TANK, clamp_z=0.5, stress_free_fill=0.5,
                                         thickness=3e-3, shear_modulus=1.8e6, density=1150.0)
