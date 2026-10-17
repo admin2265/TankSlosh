@@ -7,7 +7,8 @@ Conventions (tank frame, axes x, y lateral, z along the tank axis):
                        ground test at rest f = (0, 0, +g).
   x_n, y_n, z_n        oscillator displacement relative to the tank.
   interface_force      force the liquid exerts on the tank (N).
-  interface_moment     moment of that force about (0, 0, z_ref) (N m).
+  interface_moment     moment of that force about ref_point (N m), e.g. the
+                       tank mount / accelerometer location.
   liquid_cg            liquid CG in the tank frame (m), to first order.
 
 Equation of each oscillator:  x_n'' + 2 zeta_n w_n x_n' + w_n^2 x_n = -f.
@@ -42,11 +43,12 @@ class SimResult:
     t: np.ndarray                  # (N,)
     specific_force: np.ndarray     # (N, 3) accelerometer reading, m/s^2
     interface_force: np.ndarray    # (N, 3) liquid force on tank, N
-    interface_moment: np.ndarray   # (N, 3) about (0, 0, z_ref), N m
+    interface_moment: np.ndarray   # (N, 3) about ref_point, N m
     liquid_cg: np.ndarray          # (N, 3) m, tank frame
     lateral_disp: np.ndarray       # (N, n_lat, 2) oscillator x, y displacements, m
     axial_disp: np.ndarray         # (N, n_ax) oscillator z displacements, m
     external_force: Optional[np.ndarray] = None  # (N, 3), coupled runs only
+    ref_point: tuple = (0.0, 0.0, 0.0)           # moment reference point, m
 
     def to_csv(self, path) -> None:
         cols = {"t": self.t}
@@ -127,8 +129,9 @@ def _check_time(t) -> tuple:
     return t, dt
 
 
-def _run(params: EMMParams, t, u, coupled: bool, dry_mass: float, z_ref: float,
+def _run(params: EMMParams, t, u, coupled: bool, dry_mass: float, ref_point,
          initial: str) -> SimResult:
+    xr, yr, zr = (float(c) for c in ref_point)
     t, dt = _check_time(t)
     u = _as_input(t, u)
     lat, ax = params.lateral_modes, params.axial_modes
@@ -191,8 +194,8 @@ def _run(params: EMMParams, t, u, coupled: bool, dry_mass: float, z_ref: float,
     F[:, 1] = -params.fixed_mass * f[:, 1] + S[:, 1]
     F[:, 2] = -params.axial_rigid_mass * f[:, 2] + S[:, 2]
 
-    arm0 = params.fixed_height - z_ref
-    arm = h_lat - z_ref
+    arm0 = params.fixed_height - zr
+    arm = h_lat - zr
     # moment of lateral forces (z * F) plus axial load of each slosh mass at its offset
     mom_xz = -params.fixed_mass * f[:, 0] * arm0 + (xl * k_lat + vxl * c_lat) @ arm
     mom_yz = -params.fixed_mass * f[:, 1] * arm0 + (yl * k_lat + vyl * c_lat) @ arm
@@ -201,6 +204,10 @@ def _run(params: EMMParams, t, u, coupled: bool, dry_mass: float, z_ref: float,
     M = np.zeros_like(u)
     M[:, 0] = -mom_yz - f[:, 2] * shift_y      # M_x = y F_z - z F_y
     M[:, 1] = mom_xz + f[:, 2] * shift_x       # M_y = z F_x - x F_z
+    # shift from (0, 0, zr) to (xr, yr, zr): M_P = M - (xr, yr, 0) x F
+    M[:, 0] -= yr * F[:, 2]
+    M[:, 1] += xr * F[:, 2]
+    M[:, 2] -= xr * F[:, 1] - yr * F[:, 0]
 
     cg = np.empty_like(u)
     cg[:, 0] = shift_x / m_liq
@@ -210,25 +217,27 @@ def _run(params: EMMParams, t, u, coupled: bool, dry_mass: float, z_ref: float,
     lateral_disp = np.stack([xl, yl], axis=-1)
     return SimResult(t=t, specific_force=f, interface_force=F, interface_moment=M,
                      liquid_cg=cg, lateral_disp=lateral_disp, axial_disp=zl,
-                     external_force=u if coupled else None)
+                     external_force=u if coupled else None, ref_point=(xr, yr, zr))
 
 
-def simulate_prescribed(params: EMMParams, t, specific_force, z_ref: float = 0.0,
+def simulate_prescribed(params: EMMParams, t, specific_force, ref_point=(0.0, 0.0, 0.0),
                         initial: str = "static") -> SimResult:
     """Tank motion is prescribed through the specific force f(t) (shape (N, 3)).
+
+    ref_point is the (x, y, z) point the moment is taken about.
 
     initial = 'static' starts the oscillators in equilibrium under f(t[0]);
     'rest' starts them undeflected.
     """
-    return _run(params, t, specific_force, coupled=False, dry_mass=0.0, z_ref=z_ref,
+    return _run(params, t, specific_force, coupled=False, dry_mass=0.0, ref_point=ref_point,
                 initial=initial)
 
 
 def simulate_coupled(params: EMMParams, t, external_force, dry_mass: float,
-                     z_ref: float = 0.0, initial: str = "static") -> SimResult:
+                     ref_point=(0.0, 0.0, 0.0), initial: str = "static") -> SimResult:
     """External force F_ext(t) (shape (N, 3)) acts on a rigid dry structure of
     mass dry_mass (everything except the liquid) carrying the tank."""
     if dry_mass <= 0:
         raise ValueError("dry_mass must be positive")
-    return _run(params, t, external_force, coupled=True, dry_mass=dry_mass, z_ref=z_ref,
+    return _run(params, t, external_force, coupled=True, dry_mass=dry_mass, ref_point=ref_point,
                 initial=initial)

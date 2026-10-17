@@ -73,6 +73,22 @@ class TestPrescribed(unittest.TestCase):
         self.assertAlmostEqual(r2.interface_moment[-1, 0], -r.interface_moment[-1, 1], places=9)
 
 
+    def test_moment_about_mount_point(self):
+        # M_P = M_O - P x F for any reference point P
+        p = one_mode(zeta=0.03, axial=True)
+        t = time_grid(5.0, 0.002)
+        u = vector_input(t, x=trapezoid_pulse(t, 0.5, 1.0, 0.3, rise=0.1),
+                         y=trapezoid_pulse(t, 1.0, 1.0, -0.2, rise=0.1),
+                         z=0.01 + trapezoid_pulse(t, 2.0, 1.0, 0.4, rise=0.1))
+        P = np.array([0.2, -0.05, 0.3])
+        r0 = simulate_prescribed(p, t, u)
+        rP = simulate_prescribed(p, t, u, ref_point=P)
+        expected = r0.interface_moment - np.cross(P, r0.interface_force)
+        np.testing.assert_allclose(rP.interface_moment, expected, rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(rP.interface_force, r0.interface_force)
+        self.assertEqual(rP.ref_point, tuple(P))
+
+
 class TestCoupled(unittest.TestCase):
     def test_momentum_conservation(self):
         p = one_mode(zeta=0.02, axial=True)
