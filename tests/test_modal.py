@@ -7,9 +7,9 @@ from scipy.special import jn_zeros
 from tankslosh import cylinder_free_surface
 from tankslosh.diaphragm_static import DiaphragmStatics
 from tankslosh.harmonic_shell import HarmonicShell
-from tankslosh.liquid_fe import (HarmonicPotential, build_mesh, surface_normals,
+from tankslosh.liquid_fe import (HarmonicPotential, build_mesh, surface_moment, surface_normals,
                                  translation_coupling)
-from tankslosh.modal import lateral_modes
+from tankslosh.modal import axial_modes, axisymmetric_hessians, combined_emm, lateral_modes
 from tankslosh.shell import AxisymmetricShell
 
 MU = 1.8e6
@@ -139,6 +139,82 @@ class TestBaselineModes(unittest.TestCase):
         self.assertAlmostEqual(self.res[0.1].slosh_mass[k] / self.res[0.1].contents_mass, 0.495, delta=0.01)
         k = self.res[0.55].dominant(1)[0]
         self.assertAlmostEqual(self.res[0.55].freq_hz[k], 1.10, delta=0.05)
+
+
+def _vacuum_axisym(sh, r, z, rho):
+    """m = 0 modes of a clamped shell without liquid (no volume constraint)."""
+    HU, _ = axisymmetric_hessians(sh, r, z)
+    N, n = sh.N, 2 * (sh.N + 1)
+    m = rho * sh.t * sh.A0_node
+    Z = null_space(np.array([np.eye(n)[0], np.eye(n)[1], np.eye(n)[2 * N]]))
+    w2, phi = eigh(Z.T @ HU @ Z, Z.T @ np.diag(np.repeat(m, 2)) @ Z)
+    U = Z @ phi
+    fz = np.sum(U[1::2] ** 2 * m[:, None], 0) / np.sum(U ** 2 * np.repeat(m, 2)[:, None], 0)
+    return np.sqrt(np.abs(w2)) / (2 * np.pi), fz
+
+
+class TestAxial(unittest.TestCase):
+    def test_prestressed_membrane_axisymmetric(self):
+        a0, t0, lam, rho, N = 0.15, 1e-4, 1.3, 1000.0, 60
+        r0 = np.linspace(a0, 0, N + 1)
+        sh = AxisymmetricShell(r0, np.zeros(N + 1), MU, t0)
+        f, fz = _vacuum_axisym(sh, lam * r0, np.zeros(N + 1), rho)
+        a, T, rA = lam * a0, MU * t0 * (1 - lam ** -6), rho * t0 / lam ** 2
+        exact = jn_zeros(0, 3) / a * np.sqrt(T / rA) / (2 * np.pi)
+        np.testing.assert_allclose(f[fz > 0.9][:3], exact, rtol=2e-3)
+
+    def test_clamped_plate_axisymmetric(self):
+        # clamped plate, no nodal diameter: lambda^2 = 10.2158, 39.771
+        a, t, rho, N = 0.2, 0.01, 1000.0, 60
+        sh = AxisymmetricShell(np.linspace(a, 0, N + 1), np.zeros(N + 1), MU, t)
+        f, fz = _vacuum_axisym(sh, sh.r0, sh.z0, rho)
+        exact = np.array([10.2158, 39.771]) / a ** 2 * np.sqrt(sh.D / (rho * t)) / (2 * np.pi)
+        np.testing.assert_allclose(f[fz > 0.9][:2], exact, rtol=3e-3)
+
+    def test_free_surface_axisymmetric_slosh(self):
+        # f = sqrt(g k tanh(k h)) / 2 pi, k = xi / R with J1(xi) = 0; no axial participation
+        R, h, g, rho, hm = 0.2, 0.3, 9.80665, 998.2, 0.006
+        nb, nh = int(round(R / hm)), int(round(h / hm))
+        wall = np.vstack([np.column_stack([np.linspace(0, R, nb + 1), np.zeros(nb + 1)]),
+                          np.column_stack([np.full(nh, R), np.linspace(0, h, nh + 1)[1:]])])
+        surf = np.column_stack([np.linspace(R, 0, nb + 1), np.full(nb + 1, h)])
+        hp = HarmonicPotential(build_mesh(wall, surf, hm), 0)
+        nrm = surface_normals(surf)
+        G = hp.surface_load_matrix(nrm, 2, normal_dofs=(0, 1))
+        Ma = rho * 2 * np.pi * G.T @ hp.solve(G)
+        flux = surface_moment(surf, nrm, 2, (0, 1), 1, 0)
+        Gam = rho * 2 * np.pi * surface_moment(surf, nrm, 2, (0, 1), 1, 1)
+        ns = len(surf)
+        Kg = np.zeros((2 * ns, 2 * ns))
+        for j in range(ns - 1):
+            A, B = surf[j], surf[j + 1]
+            L = np.linalg.norm(B - A)
+            for q in (0.5 - 0.5 / np.sqrt(3), 0.5 + 0.5 / np.sqrt(3)):
+                rr = (1 - q) * A[0] + q * B[0]
+                Nq = np.array([1 - q, q])
+                idx = [2 * j + 1, 2 * (j + 1) + 1]
+                Kg[np.ix_(idx, idx)] += rho * g * 2 * np.pi * 0.5 * L * rr * np.outer(Nq, Nq)
+        n = 2 * ns
+        Z = null_space(np.array([np.eye(n)[2 * k] for k in range(ns)] + [flux]))
+        w2, phi = eigh(Z.T @ Kg @ Z, Z.T @ Ma @ Z)
+        xi = jn_zeros(1, 2)
+        exact = np.sqrt(g * xi / R * np.tanh(xi * h / R)) / (2 * np.pi)
+        np.testing.assert_allclose(np.sqrt(w2[:2]) / (2 * np.pi), exact, rtol=5e-3)
+        self.assertLess(np.abs(phi.T @ (Z.T @ Gam)).max(), 1e-10)
+
+    def test_baseline_axial(self):
+        ds = DiaphragmStatics(n_segments=50)
+        for s in ds.sweep([0.1, 0.7]):
+            am = axial_modes(ds, s)
+            self.assertTrue(am.stable)
+            self.assertLess(am.slosh_mass.sum(), am.contents_mass)
+            p = combined_emm(lateral_modes(ds, s), am)
+            self.assertEqual(len(p.axial_modes), 2)
+            self.assertGreater(p.axial_rigid_mass, 0)
+            if round(s.fill, 2) == 0.1:   # 50-segment value, converged to ~1 %
+                k = am.dominant(1)[0]
+                self.assertAlmostEqual(am.freq_hz[k], 15.7, delta=0.3)
+                self.assertAlmostEqual(am.slosh_mass[k] / am.contents_mass, 0.274, delta=0.01)
 
 
 if __name__ == "__main__":

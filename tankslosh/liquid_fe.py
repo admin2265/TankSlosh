@@ -13,7 +13,9 @@ form, per unit of the azimuth integral, is
     a(phi, psi) = int (phi_r psi_r + phi_z psi_z + m^2 phi psi / r^2) r dr dz.
 A normal velocity w_n cos(m t) of the wetted surface enters as the Neumann
 load int w_n psi r ds. With phi = 0 on the axis (m >= 1) the problem is
-regular, and for m = 1 the azimuth integral of cos^2 gives a factor pi:
+regular. For m = 0 the free constant is fixed at one node and the load must
+be volume-preserving (zero net flux). The azimuth integral of cos^2(m t) is
+pi for m = 1 and 2 pi for m = 0, so for m = 1
     liquid kinetic energy = 1/2 rho pi  w_dot^T G^T A^-1 G w_dot.
 """
 from __future__ import annotations
@@ -134,8 +136,8 @@ class HarmonicPotential:
     """Assembled potential-flow operator for harmonic m on a LiquidMesh."""
 
     def __init__(self, mesh: LiquidMesh, m: int = 1):
-        if m < 1:
-            raise ValueError("only m >= 1 is supported (phi = 0 on the axis)")
+        if m < 0:
+            raise ValueError("m must be >= 0")
         self.mesh, self.m = mesh, m
         p = mesh.nodes[mesh.tris]                       # (nt, 3, 2)
         x1, x2, x3 = p[:, 0], p[:, 1], p[:, 2]
@@ -157,7 +159,10 @@ class HarmonicPotential:
         J = np.tile(mesh.tris, (1, 3)).ravel()
         Kfull = coo_matrix((Ke.ravel(), (I, J)), shape=(n, n)).tocsc()
         free = np.ones(n, dtype=bool)
-        free[mesh.axis_nodes] = False
+        if m >= 1:
+            free[mesh.axis_nodes] = False   # phi = 0 on the axis
+        else:
+            free[0] = False                  # m = 0: fix the free constant (gauge)
         self.free = np.where(free)[0]
         self.pos = -np.ones(n, dtype=int)
         self.pos[self.free] = np.arange(len(self.free))
@@ -209,6 +214,25 @@ def surface_normals(surface: np.ndarray) -> np.ndarray:
     d = np.diff(surface, axis=0)
     n = np.column_stack([d[:, 1], -d[:, 0]])
     return n / np.linalg.norm(n, axis=1, keepdims=True)
+
+
+def surface_moment(surface: np.ndarray, normals: np.ndarray, n_dof_per_node: int,
+                   normal_dofs=(0, 2), power_r: int = 1, power_z: int = 0) -> np.ndarray:
+    """Per surface DOF: int r^power_r z^power_z w_n ds over the wetted surface.
+    (power_r=1, power_z=0): volume flux / 2 pi;  (1, 1): axial first moment / 2 pi."""
+    ns = len(surface)
+    out = np.zeros(ns * n_dof_per_node)
+    for j in range(ns - 1):
+        a, b = surface[j], surface[j + 1]
+        L = np.linalg.norm(b - a)
+        for g in _G2:
+            rr = (1 - g) * a[0] + g * b[0]
+            zz = (1 - g) * a[1] + g * b[1]
+            wgt = 0.5 * L * rr ** power_r * zz ** power_z
+            for node, Nu in ((j, 1 - g), (j + 1, g)):
+                for comp, nc in zip(normal_dofs, normals[j]):
+                    out[node * n_dof_per_node + comp] += wgt * Nu * nc
+    return out
 
 
 def translation_coupling(surface: np.ndarray, normals: np.ndarray, n_dof_per_node: int,
