@@ -16,6 +16,8 @@ The baseline tank, diaphragm and required outputs are defined in [PROBLEM_STATEM
 |---|---|
 | `tankslosh/emm.py` | `SloshMode`, `EMMParams` (one fill level), `EMMTable` (values vs. fill fraction, interpolated, saved and loaded as JSON) |
 | `tankslosh/geometry.py` | Baseline tank (cylinder with 2:1 elliptical heads), molded cup diaphragm, mount point |
+| `tankslosh/shell.py`, `tankslosh/diaphragm_static.py` | Level B step 1: axisymmetric neo-Hookean shell, volume-constrained static diaphragm shape with frictionless wall contact (see [docs/diaphragm_statics.md](docs/diaphragm_statics.md)) |
+| `examples/diaphragm_statics.py` | 5–95 % fill sweep of diaphragm shape, Δp and stretch |
 | `tankslosh/freesurface.py` | Analytic free-surface cylinder values (Abramson SP-106 / Dodge 2000), Bond number, viscous damping estimate |
 | `tankslosh/simulate.py` | `simulate_prescribed` (tank motion given) and `simulate_coupled` (thruster force on the dry structure) |
 | `tankslosh/inputs.py` | Time grid, trapezoid pulse, stacking per-axis inputs into (N, 3) |
@@ -57,5 +59,5 @@ py -3.12 examples/demo.py
 - Tank volumes against numerical integration. Molded cup holds exactly 50 % fill. Diaphragm mass.
 
 ## Next steps
-1. Level B: compute the diaphragm's static shape (neo-Hookean, volume-constrained) and its coupled m=0/m=1 modes with potential flow, giving `EMMTable` values over 10–90 % fill.
+1. Level B step 2: coupled m=0/m=1 diaphragm–liquid modes about the static shapes (step 1 is done), giving `EMMTable` values over 5–95 % fill.
 2. CFD comparison tool: import StarCCM+ force and CG histories, filter out acoustic content, fit f_n and ζ_n.
