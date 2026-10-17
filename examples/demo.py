@@ -1,11 +1,13 @@
 """Demonstration of the Level A slosh model.
 
-Case 1  1-g free-surface reference: flat-bottom cylinder on the ground, lateral
-        acceleration pulse. Classical theory gives the parameters, so this is
+Case 1  1-g free-surface reference: flat-bottom cylinder on the ground (not the
+        baseline elliptical-head tank), lateral acceleration pulse. Classical theory gives the parameters, so this is
         also a ready-made check case for a StarCCM+ VOF set-up.
 Case 2  Spacecraft in orbit with a diaphragm tank, using the PLACEHOLDER parameter
         file diaphragm_emm_template.json: a thruster force pulse on the dry
-        structure, giving the accelerometer signal and liquid CG motion.
+        structure of the baseline tank (PROBLEM_STATEMENT.md), giving the
+        accelerometer signal, liquid CG motion and the liquid's reaction force and
+        moment at the mid-height side mount.
 
 Run from the project root:  py -3.12 examples/demo.py
 Plots and CSVs are written to examples/output/.
@@ -70,13 +72,17 @@ def case2_orbit_coupled():
     Fz = ts.trapezoid_pulse(t, 8.0, 2.0, 10.0, rise=0.05)  # 10 N axial thruster for 2 s
 
     t0 = time.perf_counter()
-    r = ts.simulate_coupled(p, t, ts.vector_input(t, x=Fx, z=Fz), dry_mass=dry_mass)
+    mount = ts.BASELINE_MOUNT_POINT
+    r = ts.simulate_coupled(p, t, ts.vector_input(t, x=Fx, z=Fz), dry_mass=dry_mass,
+                            ref_point=mount)
     dt_run = time.perf_counter() - t0
     print(f"  simulated {t[-1]:.0f} s at {1 / (t[1] - t[0]):.0f} Hz in {dt_run * 1e3:.1f} ms")
+    print(f"  mount point {mount} m: peak |F_x| = {np.abs(r.interface_force[:, 0]).max():.3f} N, "
+          f"peak |M_y| = {np.abs(r.interface_moment[:, 1]).max():.4f} N m")
     r.to_csv(os.path.join(OUT, "case2_orbit.csv"))
 
     rigid = (Fx / (dry_mass + p.liquid_mass), Fz / (dry_mass + p.liquid_mass))
-    fig, axs = plt.subplots(3, 1, sharex=True, figsize=(8, 7))
+    fig, axs = plt.subplots(4, 1, sharex=True, figsize=(8, 9))
     axs[0].plot(t, Fx, label="F_x")
     axs[0].plot(t, Fz, label="F_z")
     axs[0].set_ylabel("thruster force [N]")
@@ -89,8 +95,13 @@ def case2_orbit_coupled():
     axs[2].plot(t, 1e3 * r.liquid_cg[:, 0], label="CG x")
     axs[2].plot(t, 1e3 * (r.liquid_cg[:, 2] - p.cg_height), label="CG z − rest")
     axs[2].set_ylabel("liquid CG shift [mm]")
-    axs[2].set_xlabel("time [s]")
     axs[2].legend()
+    axs[3].plot(t, r.interface_force[:, 0], label="F_x")
+    axs[3].plot(t, r.interface_force[:, 2], label="F_z")
+    axs[3].plot(t, r.interface_moment[:, 1], label="M_y [N m]")
+    axs[3].set_ylabel("liquid load at mount [N]")
+    axs[3].set_xlabel("time [s]")
+    axs[3].legend()
     fig.suptitle("Case 2: orbit, coupled spacecraft (PLACEHOLDER diaphragm parameters)")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "case2_orbit.png"), dpi=120)

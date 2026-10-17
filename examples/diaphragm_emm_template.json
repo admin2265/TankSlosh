@@ -1,14 +1,14 @@
 {
-  "liquid_mass": 31.36,
-  "fixed_mass": 24.76,
-  "fixed_height": 0.12,
+  "liquid_mass": 33.45,
+  "fixed_mass": 26.85,
+  "fixed_height": 0.1482,
   "lateral_modes": [
-    {"mass": 6.0, "freq_hz": 0.8, "zeta": 0.05, "height": 0.18},
-    {"mass": 0.6, "freq_hz": 2.5, "zeta": 0.05, "height": 0.20}
+    {"mass": 6.0, "freq_hz": 1.5, "zeta": 0.05, "height": 0.24},
+    {"mass": 0.6, "freq_hz": 4.0, "zeta": 0.05, "height": 0.26}
   ],
   "axial_modes": [
-    {"mass": 2.0, "freq_hz": 1.5, "zeta": 0.05, "height": 0.0}
+    {"mass": 2.0, "freq_hz": 2.5, "zeta": 0.05, "height": 0.0}
   ],
   "fill_fraction": 0.5,
-  "notes": "PLACEHOLDER values to demonstrate the workflow only; NOT physically derived. Replace with Level B (diaphragm + potential flow) results or parameters identified from StarCCM+/test. Water, R = 0.2 m cylinder, 50% of H = 0.5 m."
+  "notes": "PLACEHOLDER values to demonstrate the workflow only; NOT physically derived. Masses and CG height (0.1667 m) match the baseline tank at 50 % fill (PROBLEM_STATEMENT.md); oscillator masses, frequencies, heights and damping are guesses. Replace with Level B results or parameters identified from StarCCM+/test."
 }
