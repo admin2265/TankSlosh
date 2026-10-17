@@ -1,18 +1,18 @@
-# Lateral slosh modes (Level B, step 2)
+# Slosh modes (Level B, step 2)
 
-These are the small sideways oscillations of the diaphragm and liquid about each static shape from [step 1](diaphragm_statics.md), converted into the spring-mass parameters (Level A) used by `tankslosh.simulate`.
+These are the small oscillations of the diaphragm and liquid about each static shape from [step 1](diaphragm_statics.md), sideways (m = 1) and axial (m = 0), converted into the spring-mass parameters (Level A) used by `tankslosh.simulate`.
 
 Code:
 - `tankslosh/harmonic_shell.py`: shell stiffness and mass for m = 1.
 - `tankslosh/liquid_fe.py`: liquid potential flow.
-- `tankslosh/modal.py`: coupled modes and the conversion to Level A parameters.
+- `tankslosh/modal.py`: coupled lateral and axial modes and the conversion to Level A parameters.
 - `examples/slosh_modes.py`: sweep and plots.
 
 Run it with:
 ```bash
 py -3.12 examples/slosh_modes.py
 ```
-It takes about 1.5 min and writes `examples/output/baseline_lateral_emm.json`, which can be loaded directly with `EMMTable.load_json`.
+It takes about 1.5 min and writes `examples/output/baseline_emm.json`, which holds both the lateral and the axial oscillators. Load it directly with `EMMTable.load_json`.
 
 ## Model
 - **Displacement pattern.** Sideways tank acceleration excites only the cos θ (m = 1) pattern. Each meridian node carries (u_r cos θ, u_θ sin θ, u_z cos θ).
@@ -74,14 +74,46 @@ The full table is in `examples/output/slosh_modes.csv`.
 4. **No buckling was predicted.** Every static state is stable to m = 1 perturbations: all eigenvalues are positive. This is within the axisymmetric-statics assumption.
 5. **All slosh frequencies (1–80 Hz) are far below the liquid's acoustic modes** (about 1 kHz), so treating the liquid as incompressible is consistent.
 
+## Axial (m = 0) modes
+Axial acceleration excites only axisymmetric motion. Each node moves by (u_r, u_z). Because the liquid is incompressible and fills the region below the diaphragm, these "breathing" modes must change the diaphragm's shape without changing the volume it encloses. That condition is a constraint on the diaphragm's motion, and it is also the condition that makes the m = 0 liquid potential problem solvable.
+- **Stiffness:** K = ∂²U − λ∂²V of the step-1 axisymmetric energy, by central differences of its analytic gradient.
+- **Liquid:** m = 0 potential flow on the same mesh. The potential's free constant is fixed at one node, and the azimuth factor is 2π.
+- **Coupling:** the coupling to axial acceleration is the first moment ρ∮z·w_n dS plus the rubber's own mass.
+- **In the table:** the modes become the `axial_modes` of each table entry. The two lowest-frequency modes carrying at least 0.2 % of the contents are kept. The rest of the contents moves rigidly in z.
+
+**Verification:**
+
+| Check | Result |
+|---|---|
+| Pre-tensioned membrane, f = j₀ₙ√(T/ρ_A)/(2πa) | within 0.05 % |
+| Clamped plate, axisymmetric modes (λ² = 10.2158, 39.771) | within 0.07 % |
+| Free-surface axisymmetric slosh (J₁(ξ) = 0) | within 0.05 % (mode 1) |
+| Free surface: no participation in axial acceleration | exact, as theory requires |
+| Mesh convergence, 50 → 100 segments | about 1–3 % |
+
+**Results:**
+
+| Fill | Axial mode 1 | Axial mode 2 |
+|---|---|---|
+| 5 % | 21.0 Hz (34 %) | 47.9 Hz (20 %) |
+| 10 % | 15.7 Hz (27 %) | 39.2 Hz (10 %) |
+| 30 % | 21.2 Hz (12 %) | 47.1 Hz (1 %) |
+| 50 % | 8.3 Hz (1.1 %) | 11.7 Hz (1.0 %) |
+| 55 % | 10.1 Hz (0.3 %) | 127 Hz (1.0 %) |
+| 70 % | 8.6 Hz (1.7 %) | 14.8 Hz (0.8 %) |
+| 90 % | 7.2 Hz (1.7 %) | 10.3 Hz (2.2 %) |
+
+Percentages are slosh mass as a share of the contents.
+
+- **Below about 40 % fill**, axial acceleration strongly excites the taut, stretched diaphragm: 15–21 Hz, carrying 10–35 % of the contents.
+- **From 50 % up**, the axial modes carry only 1–3 % of the contents. Axially, the contents behave almost like a rigid mass.
+
 ## Limitations
 - **Material, contact and symmetry.** Everything in [step 1](diaphragm_statics.md#limitations-and-risks) carries over: the neo-Hookean model at large stretch, frictionless contact, and axisymmetric static shapes.
 - **Linear only.** Large-amplitude slosh, contact opening and closing, and snap-through in the soft band are not captured.
 - **Placeholder damping.** ζ is a placeholder, 0.02 for all modes. Fit it to StarCCM+ or test data.
-- **Lateral only.** Axial (m = 0) modes are not yet computed, so the axial force is that of a rigid contents mass.
 - **No residual acceleration.** There is no hydrostatic stiffness from residual acceleration. This is negligible at about 1e-3 m/s² or less, but it is not included.
 - **Minor-mode heights.** Modes with very small slosh mass can have heights outside the tank, which is normal for spring-mass models. The heights of the minor modes (2 and 3) jump between fills because mode identities swap.
 
 ## Next
-- Axial (m = 0) modes, using the step-1 axisymmetric energy with the volume constraint.
 - A StarCCM+ comparison case at 2–3 fills. Suggested fills: 30 % (taut), 55 % (soft band) and 80 % (inverted). Fit ζ there.
