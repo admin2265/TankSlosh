@@ -11,6 +11,8 @@ The bookkeeping requires `m0 + Σ m_n(lateral) = m`.
 
 The baseline tank, diaphragm and required outputs are defined in [PROBLEM_STATEMENT.md](PROBLEM_STATEMENT.md).
 
+**New users: start with the [user manual](docs/USER_MANUAL.md)**, which covers installation, running load cases and regenerating parameters.
+
 ## Layout
 | File | Contents |
 |---|---|
