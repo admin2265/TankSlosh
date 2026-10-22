@@ -10,7 +10,7 @@ import numpy as np
 import tankslosh as ts
 from tankslosh.cases import load_case
 from tankslosh.emm import EMMTable
-from tankslosh.run_case import run_case
+from tankslosh.run_case import rebuild_report, run_case
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 
@@ -102,6 +102,14 @@ class TestRunTinyCase(unittest.TestCase):
                 md = fh.read()
             self.assertIn("Inputs that are estimates", md)
             self.assertIn("1 g, gas on top", md)
+            # report rebuilt from the CSVs keeps the run line and the same tables
+            rebuild_report(tmp)
+            with open(os.path.join(out, "results.md"), encoding="utf-8") as fh:
+                md2 = fh.read()
+            self.assertIn("- Run:", md2)
+            self.assertIn("Report rebuilt", md2)
+            strip = lambda t: [ln for ln in t.splitlines() if ln.startswith("| ")]  # noqa: E731
+            self.assertEqual(strip(md), strip(md2))
 
 
 if __name__ == "__main__":
