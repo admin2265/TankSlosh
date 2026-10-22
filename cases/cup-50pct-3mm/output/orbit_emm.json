@@ -1,0 +1,784 @@
+{
+  "notes": "Level B lateral + axial slosh modes, case cup-50pct-3mm, orbit (no gravity); 3 lateral + 2 axial modes kept, zeta = 0.02 placeholder (fit to CFD)",
+  "entries": [
+    {
+      "liquid_mass": 4.521387398230811,
+      "fixed_mass": 2.229089248171019,
+      "fixed_height": 0.2520254574773032,
+      "lateral_modes": [
+        {
+          "mass": 1.542514574684767,
+          "freq_hz": 4.343775922686831,
+          "zeta": 0.02,
+          "height": 0.05132270464302381
+        },
+        {
+          "mass": 0.7083260618041944,
+          "freq_hz": 21.323053394707998,
+          "zeta": 0.02,
+          "height": -0.08533169211024984
+        },
+        {
+          "mass": 0.041457513570830454,
+          "freq_hz": 31.548907455653758,
+          "zeta": 0.02,
+          "height": 0.4150642910840238
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 1.5181416338035207,
+          "freq_hz": 21.035211428175852,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.9084649539973538,
+          "freq_hz": 47.84582777044418,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.05,
+      "notes": "Level B lateral modes, contents = liquid 3.345 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 7.866387704165032,
+      "fixed_mass": 3.567191727413385,
+      "fixed_height": 0.22703082021828333,
+      "lateral_modes": [
+        {
+          "mass": 3.8926569021277992,
+          "freq_hz": 6.078091152876291,
+          "zeta": 0.02,
+          "height": 0.017404575388671635
+        },
+        {
+          "mass": 0.29123736638875003,
+          "freq_hz": 26.257288452747677,
+          "zeta": 0.02,
+          "height": -0.1895050435454025
+        },
+        {
+          "mass": 0.11530170823509756,
+          "freq_hz": 32.114102291059886,
+          "zeta": 0.02,
+          "height": 0.23977984008701675
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 2.1474227001331165,
+          "freq_hz": 15.715158447874696,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.7724171584218267,
+          "freq_hz": 39.219115108761294,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.1,
+      "notes": "Level B lateral modes, contents = liquid 6.690 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 11.211388010099252,
+      "fixed_mass": 5.293902392886258,
+      "fixed_height": 0.21123817549798402,
+      "lateral_modes": [
+        {
+          "mass": 5.6107394475848915,
+          "freq_hz": 7.803607289303997,
+          "zeta": 0.02,
+          "height": 0.011443280171645169
+        },
+        {
+          "mass": 0.17088454857332247,
+          "freq_hz": 30.0679471706901,
+          "zeta": 0.02,
+          "height": -0.21225228539634447
+        },
+        {
+          "mass": 0.13586162105478072,
+          "freq_hz": 36.346671016300114,
+          "zeta": 0.02,
+          "height": 0.2612347482508057
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 2.7205292810058843,
+          "freq_hz": 19.1319135129731,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.5590416076726785,
+          "freq_hz": 44.89964199245968,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.15,
+      "notes": "Level B lateral modes, contents = liquid 10.035 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 14.556388316033473,
+      "fixed_mass": 7.464660951721912,
+      "fixed_height": 0.20235324301026636,
+      "lateral_modes": [
+        {
+          "mass": 6.793219119088109,
+          "freq_hz": 8.778275357531935,
+          "zeta": 0.02,
+          "height": 0.010841595515015632
+        },
+        {
+          "mass": 0.05225843620980507,
+          "freq_hz": 31.552676386722737,
+          "zeta": 0.02,
+          "height": -0.35863862942050323
+        },
+        {
+          "mass": 0.24624980901364676,
+          "freq_hz": 38.7656581537889,
+          "zeta": 0.02,
+          "height": 0.16148002079842033
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 2.868217215750124,
+          "freq_hz": 20.347470602866554,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.3662836709438717,
+          "freq_hz": 46.48454188847877,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.2,
+      "notes": "Level B lateral modes, contents = liquid 13.380 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 17.901388621967694,
+      "fixed_mass": 9.891950546338924,
+      "fixed_height": 0.1965268887899831,
+      "lateral_modes": [
+        {
+          "mass": 7.53610429213916,
+          "freq_hz": 9.33547256419669,
+          "zeta": 0.02,
+          "height": 0.013997469652811463
+        },
+        {
+          "mass": 0.3407406048159803,
+          "freq_hz": 41.22162147559678,
+          "zeta": 0.02,
+          "height": 0.11223434989022628
+        },
+        {
+          "mass": 0.13259317867362985,
+          "freq_hz": 62.344286865699026,
+          "zeta": 0.02,
+          "height": 0.2408564576473447
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 2.7969359445327693,
+          "freq_hz": 20.678547440544786,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.24580090661079748,
+          "freq_hz": 46.5721530081388,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.25,
+      "notes": "Level B lateral modes, contents = liquid 16.725 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 21.246388927901915,
+      "fixed_mass": 12.764807012005244,
+      "fixed_height": 0.1955257910575512,
+      "lateral_modes": [
+        {
+          "mass": 7.996251261880554,
+          "freq_hz": 9.884697023471478,
+          "zeta": 0.02,
+          "height": 0.02083781064670507
+        },
+        {
+          "mass": 0.37562474160695414,
+          "freq_hz": 44.56099201236282,
+          "zeta": 0.02,
+          "height": 0.10033305294850119
+        },
+        {
+          "mass": 0.10970591240916229,
+          "freq_hz": 62.73350554041531,
+          "zeta": 0.02,
+          "height": 0.2154006051063104
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 2.5929621644658893,
+          "freq_hz": 21.204724744215703,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.23868641684360498,
+          "freq_hz": 47.048941398549026,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.3,
+      "notes": "Level B lateral modes, contents = liquid 20.070 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 24.591389233836132,
+      "fixed_mass": 15.855194898796825,
+      "fixed_height": 0.19670008238166858,
+      "lateral_modes": [
+        {
+          "mass": 8.197803765216877,
+          "freq_hz": 9.654092958342963,
+          "zeta": 0.02,
+          "height": 0.030019064058908803
+        },
+        {
+          "mass": 0.4267994219537227,
+          "freq_hz": 47.17332587467491,
+          "zeta": 0.02,
+          "height": 0.09061287177803296
+        },
+        {
+          "mass": 0.11159114786870727,
+          "freq_hz": 58.125644540777635,
+          "zeta": 0.02,
+          "height": 0.15697193497600076
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 2.428205322755853,
+          "freq_hz": 20.035937472355606,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.16469321148143676,
+          "freq_hz": 43.84552505172801,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.35,
+      "notes": "Level B lateral modes, contents = liquid 23.415 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 27.93638953977036,
+      "fixed_mass": 19.056764397451722,
+      "fixed_height": 0.19910264651036644,
+      "lateral_modes": [
+        {
+          "mass": 8.30107402095088,
+          "freq_hz": 9.351019175360076,
+          "zeta": 0.02,
+          "height": 0.04222259254027318
+        },
+        {
+          "mass": 0.24792421491775168,
+          "freq_hz": 49.7766109091961,
+          "zeta": 0.02,
+          "height": 0.0822232840044296
+        },
+        {
+          "mass": 0.3306269064500064,
+          "freq_hz": 53.98392159842772,
+          "zeta": 0.02,
+          "height": 0.12459183360831595
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 2.186330331684888,
+          "freq_hz": 18.747395478156726,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.15887714787809695,
+          "freq_hz": 40.18484265537314,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.4,
+      "notes": "Level B lateral modes, contents = liquid 26.760 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 31.281389845704577,
+      "fixed_mass": 21.920053538328585,
+      "fixed_height": 0.20045003152705046,
+      "lateral_modes": [
+        {
+          "mass": 8.343515583280373,
+          "freq_hz": 8.666886822494149,
+          "zeta": 0.02,
+          "height": 0.05708492566093252
+        },
+        {
+          "mass": 0.6012540866471361,
+          "freq_hz": 55.7761979024967,
+          "zeta": 0.02,
+          "height": 0.11179683236416774
+        },
+        {
+          "mass": 0.4165666374484838,
+          "freq_hz": 82.54517371333455,
+          "zeta": 0.02,
+          "height": 0.33378672489504774
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 1.8097358905515242,
+          "freq_hz": 16.33806166029405,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.17918790990858713,
+          "freq_hz": 33.61075535032059,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.45,
+      "notes": "Level B lateral modes, contents = liquid 30.105 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 34.626390151638795,
+      "fixed_mass": 25.342711998335506,
+      "fixed_height": 0.2061349771888473,
+      "lateral_modes": [
+        {
+          "mass": 8.03972763253268,
+          "freq_hz": 6.531924606215102,
+          "zeta": 0.02,
+          "height": 0.07765761706294563
+        },
+        {
+          "mass": 0.47392948373112603,
+          "freq_hz": 9.521060049387218,
+          "zeta": 0.02,
+          "height": 0.11280551187584792
+        },
+        {
+          "mass": 0.770021037039483,
+          "freq_hz": 61.71319118093915,
+          "zeta": 0.02,
+          "height": 0.14026244307379615
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 0.39082945066901215,
+          "freq_hz": 8.341771934286719,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.33745596974665176,
+          "freq_hz": 11.699130375473736,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.5,
+      "notes": "Level B lateral modes, contents = liquid 33.450 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 37.971390457573015,
+      "fixed_mass": 28.116474665322045,
+      "fixed_height": 0.20520210260106125,
+      "lateral_modes": [
+        {
+          "mass": 7.478847497347124,
+          "freq_hz": 1.117650543849221,
+          "zeta": 0.02,
+          "height": 0.13898631491020644
+        },
+        {
+          "mass": 1.9024158905584043,
+          "freq_hz": 13.015634890384627,
+          "zeta": 0.02,
+          "height": 0.10303802692149411
+        },
+        {
+          "mass": 0.4736524043454432,
+          "freq_hz": 13.645704995899905,
+          "zeta": 0.02,
+          "height": 0.07690733474090526
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 0.11235420409733497,
+          "freq_hz": 10.076561142188377,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.39530326490480006,
+          "freq_hz": 127.33831741905591,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.55,
+      "notes": "Level B lateral modes, contents = liquid 36.795 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 41.316390763507236,
+      "fixed_mass": 30.181810943203615,
+      "fixed_height": 0.20838958240396893,
+      "lateral_modes": [
+        {
+          "mass": 10.49085040250507,
+          "freq_hz": 1.7349762586423148,
+          "zeta": 0.02,
+          "height": 0.17052399669648002
+        },
+        {
+          "mass": 0.19238408973715368,
+          "freq_hz": 11.502460382725053,
+          "zeta": 0.02,
+          "height": 0.19924172277705945
+        },
+        {
+          "mass": 0.451345328061397,
+          "freq_hz": 59.00602811683784,
+          "zeta": 0.02,
+          "height": 0.18262864144278954
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 0.28662256401359354,
+          "freq_hz": 8.750839670130295,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.14562208360470907,
+          "freq_hz": 15.936630842660799,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.6,
+      "notes": "Level B lateral modes, contents = liquid 40.140 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 44.66139106944146,
+      "fixed_mass": 32.28496681230069,
+      "fixed_height": 0.21336673677208695,
+      "lateral_modes": [
+        {
+          "mass": 11.7642542650681,
+          "freq_hz": 2.9934597777035834,
+          "zeta": 0.02,
+          "height": 0.2007278466245016
+        },
+        {
+          "mass": 0.33190142046080234,
+          "freq_hz": 11.419482519391801,
+          "zeta": 0.02,
+          "height": 0.24406106326485733
+        },
+        {
+          "mass": 0.2802685716118663,
+          "freq_hz": 23.127621631749957,
+          "zeta": 0.02,
+          "height": 0.4183097867087956
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 0.533796641196722,
+          "freq_hz": 8.637459229549682,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.2545717560977471,
+          "freq_hz": 15.420514310287198,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.65,
+      "notes": "Level B lateral modes, contents = liquid 43.485 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 48.00639137537567,
+      "fixed_mass": 33.90826835147195,
+      "fixed_height": 0.21976276232009373,
+      "lateral_modes": [
+        {
+          "mass": 12.40135294853136,
+          "freq_hz": 5.707180739479886,
+          "zeta": 0.02,
+          "height": 0.2322717078956421
+        },
+        {
+          "mass": 1.336392042347876,
+          "freq_hz": 11.501301504252696,
+          "zeta": 0.02,
+          "height": 0.2727634427882361
+        },
+        {
+          "mass": 0.3603780330244823,
+          "freq_hz": 18.358135799816257,
+          "zeta": 0.02,
+          "height": 0.2650384842556856
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 0.8189559578977146,
+          "freq_hz": 8.545741348538572,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.4063730868759005,
+          "freq_hz": 14.745281868165762,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.7,
+      "notes": "Level B lateral modes, contents = liquid 46.830 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 51.351391681309906,
+      "fixed_mass": 36.14480128487986,
+      "fixed_height": 0.22641762598592077,
+      "lateral_modes": [
+        {
+          "mass": 12.670272569667524,
+          "freq_hz": 5.704520485109279,
+          "zeta": 0.02,
+          "height": 0.25703942673400004
+        },
+        {
+          "mass": 1.858375088916745,
+          "freq_hz": 11.672602802118803,
+          "zeta": 0.02,
+          "height": 0.3030633473755972
+        },
+        {
+          "mass": 0.6779427378457795,
+          "freq_hz": 18.228345838404987,
+          "zeta": 0.02,
+          "height": 0.3192430094580085
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 1.0979000727228292,
+          "freq_hz": 8.611342470231028,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.6072839217042044,
+          "freq_hz": 14.614454373489918,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.75,
+      "notes": "Level B lateral modes, contents = liquid 50.175 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 54.69639198724413,
+      "fixed_mass": 38.18592226972645,
+      "fixed_height": 0.2320982518986781,
+      "lateral_modes": [
+        {
+          "mass": 12.24119405424718,
+          "freq_hz": 5.331509168067054,
+          "zeta": 0.02,
+          "height": 0.27966184545432154
+        },
+        {
+          "mass": 2.674779133599547,
+          "freq_hz": 10.36628707836162,
+          "zeta": 0.02,
+          "height": 0.329899205535121
+        },
+        {
+          "mass": 1.5944965296709581,
+          "freq_hz": 14.97804968646231,
+          "zeta": 0.02,
+          "height": 0.36633055818421634
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 1.1701155939438999,
+          "freq_hz": 7.801375282440213,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.8046130638266754,
+          "freq_hz": 12.361696162001309,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.8,
+      "notes": "Level B lateral modes, contents = liquid 53.520 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 58.04139229317834,
+      "fixed_mass": 40.09389709757342,
+      "fixed_height": 0.23689840925095715,
+      "lateral_modes": [
+        {
+          "mass": 11.134622632406264,
+          "freq_hz": 5.43372276470036,
+          "zeta": 0.02,
+          "height": 0.3012734436456246
+        },
+        {
+          "mass": 3.785227681547513,
+          "freq_hz": 9.442834688408931,
+          "zeta": 0.02,
+          "height": 0.35159859891439416
+        },
+        {
+          "mass": 3.027644881651149,
+          "freq_hz": 12.467666875899718,
+          "zeta": 0.02,
+          "height": 0.3902847847843947
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 1.1033817633160978,
+          "freq_hz": 7.25683338598538,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 0.980672174732232,
+          "freq_hz": 10.735354584446615,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.85,
+      "notes": "Level B lateral modes, contents = liquid 56.865 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 61.38639259911256,
+      "fixed_mass": 41.89983732889117,
+      "fixed_height": 0.24057721889515346,
+      "lateral_modes": [
+        {
+          "mass": 10.338210219133948,
+          "freq_hz": 5.4412103075080145,
+          "zeta": 0.02,
+          "height": 0.32194517705382153
+        },
+        {
+          "mass": 5.184969798425308,
+          "freq_hz": 9.030287843306159,
+          "zeta": 0.02,
+          "height": 0.37983932353295696
+        },
+        {
+          "mass": 3.9633752526621366,
+          "freq_hz": 10.944155652138347,
+          "zeta": 0.02,
+          "height": 0.4248318331237267
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 1.1665398119567956,
+          "freq_hz": 7.015007547168068,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 1.2138983797375344,
+          "freq_hz": 10.126593003219064,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.9,
+      "notes": "Level B lateral modes, contents = liquid 60.210 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    },
+    {
+      "liquid_mass": 64.73139290504677,
+      "fixed_mass": 44.032637096044226,
+      "fixed_height": 0.24587554418900345,
+      "lateral_modes": [
+        {
+          "mass": 11.469788428982515,
+          "freq_hz": 6.085696036268885,
+          "zeta": 0.02,
+          "height": 0.35677077196312035
+        },
+        {
+          "mass": 7.962412820311852,
+          "freq_hz": 8.68249100828835,
+          "zeta": 0.02,
+          "height": 0.4159815010130375
+        },
+        {
+          "mass": 1.2665545597081806,
+          "freq_hz": 10.656842090832368,
+          "zeta": 0.02,
+          "height": 0.4876627577516848
+        }
+      ],
+      "axial_modes": [
+        {
+          "mass": 1.3321882508410672,
+          "freq_hz": 7.0726422904247706,
+          "zeta": 0.02,
+          "height": 0.0
+        },
+        {
+          "mass": 1.8487576812280488,
+          "freq_hz": 10.068770562506572,
+          "zeta": 0.02,
+          "height": 0.0
+        }
+      ],
+      "fill_fraction": 0.95,
+      "notes": "Level B lateral modes, contents = liquid 63.555 kg + diaphragm 1.176 kg; zeta = 0.02 placeholder; axial modes: 2"
+    }
+  ]
+}
