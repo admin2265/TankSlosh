@@ -1,0 +1,53 @@
+# Previous baseline: plain 3 mm molded cup, stress-free at 50 % fill (CUP_3MM_DIAPHRAGM).
+# Results documented in docs/diaphragm_statics.md and docs/slosh_modes.md.
+# Run:  py -3.12 -m tankslosh.run_case cases/cup-50pct-3mm   (about 2 min)
+
+name = "cup-50pct-3mm"
+description = """
+Plain 3 mm Shore 70A molded cup: straight sidewall at the tank radius with a dome
+matching the lower head, clamped on the wall at z = 0.5 m, stress-free at 50 % fill.
+"""
+estimated = [
+    "shear modulus 1.8 MPa (Shore 70A class, not measured)",
+    "density 1150 kg/m^3",
+    "damping ratio 0.02 (placeholder)",
+]
+
+[tank]
+radius = 0.2
+height = 0.6
+head_ratio = 2.0
+mount_point = [0.2, 0.0, 0.3]
+
+[diaphragm]
+type = "cup"
+clamp_z = 0.5               # m
+stress_free_fill = 0.5
+thickness = 3e-3            # m
+material = "neo-hookean"
+shear_modulus = 1.8e6       # Pa
+density = 1150.0            # kg/m^3
+segments = 100
+
+[liquid]
+preset = "water_20c"
+
+[environment]
+orbit = true
+ground_test = false
+
+[analysis]
+fills = { start = 0.05, stop = 0.95, step = 0.05 }
+sweep_max_step = 0.025
+sweep_min_step = 0.002
+liquid_mesh = 0.005
+# Off to reproduce the documented results (docs/slosh_modes.md), which predate the
+# self-contact model. On (the default) keeps folded layers one thickness apart and
+# changes only 90-95 % fill: lateral f1 5.44 -> 5.50 Hz (90 %), 6.09 -> 6.22 Hz (95 %).
+self_contact = false
+n_keep_lateral = 3
+n_keep_axial = 2
+pulse_fills = [0.25, 0.55, 0.75]
+
+[damping]
+zeta = 0.02

@@ -219,6 +219,8 @@ def top_hat_diaphragm(tank: EllipticalHeadTank, stress_free_fill: float = 0.95,
     return d
 
 
+# Reference designs used by the tests, examples and library defaults. Customer cases are
+# defined in cases/<name>/case.toml (tankslosh/cases.py), not here.
 BASELINE_TANK = EllipticalHeadTank(radius=0.2, height=0.6, head_ratio=2.0)
 # previous baseline (Level B verification cases): 3 mm plain cup, stress-free at 50 %
 CUP_3MM_DIAPHRAGM = MoldedCupDiaphragm(tank=BASELINE_TANK, clamp_z=0.5, stress_free_fill=0.5,

@@ -1,0 +1,63 @@
+# Customer baseline: ribbed top-hat diaphragm, 2 mm web, stress-free at 95 % fill.
+# Shape and rib layout come from a photograph; see docs/top_hat_baseline.md.
+# Run:  py -3.12 -m tankslosh.run_case cases/top-hat-95pct-2mm   (about 35 min)
+
+name = "top-hat-95pct-2mm"
+description = """
+Ribbed top-hat diaphragm (EPDM-class, 2 mm web, ~36 radial ribs on the gas side).
+The brim is clamped on the wall at z = 0.2 m and the hat lines the upper tank;
+the gap to the wall is solved so the hat is stress-free at 95 % fill.
+"""
+# Shown in results.md. Frequencies scale roughly with sqrt(bending stiffness).
+estimated = [
+    "brim (clamp) height 0.2 m",
+    "rib count, height and width (from a photo)",
+    "shear modulus 1.8 MPa (EPDM-class, not measured)",
+    "density 1150 kg/m^3",
+    "damping ratio 0.02 (placeholder)",
+]
+notes = "Fills where the shape is unstable to sideways buckling are low confidence (the real diaphragm folds or tilts)."
+
+[tank]                      # cylinder with elliptical heads, z = 0 at the lower apex
+radius = 0.2                # m, inner
+height = 0.6                # m, inner, apex to apex
+head_ratio = 2.0            # radius / head depth (2:1 heads; 1 = hemispherical)
+mount_point = [0.2, 0.0, 0.3]   # m, reference point for interface moments (side mount, mid height)
+
+[diaphragm]
+type = "top_hat"            # top_hat | cup | meridian | hemisphere
+brim_z = 0.2                # m, clamp height on the wall
+lip = 0.01                  # m, height of the flare from the clamp to the sidewall
+stress_free_fill = 0.95     # fill at which the molded shape is unstressed
+thickness = 2e-3            # m, web
+material = "neo-hookean"    # neo-hookean (shear_modulus) | linear (youngs_modulus, poisson)
+shear_modulus = 1.8e6       # Pa
+density = 1150.0            # kg/m^3
+bending = true
+segments = 150              # meridian mesh
+
+[diaphragm.ribs]            # radial ribs, smeared
+count = 36
+height = 2e-3               # m, standing above the web
+width = 3e-3                # m
+
+[liquid]
+preset = "water_20c"        # density etc. can be overridden here, e.g. density = 1010.0
+
+[environment]
+orbit = true                # statics + orbit (no gravity) modes
+ground_test = true          # also 1-g modes, tank axis vertical, gas on top
+g = 9.81
+
+[analysis]
+fills = { start = 0.05, stop = 0.95, step = 0.05 }
+sweep_max_step = 0.01       # continuation step in fill; rolling diaphragms need 0.01
+sweep_min_step = 0.001
+liquid_mesh = 0.005         # m, potential-flow triangle size
+self_contact = true         # keep folded layers one wall thickness apart
+n_keep_lateral = 3
+n_keep_axial = 2
+pulse_fills = [0.25, 0.55, 0.75]
+
+[damping]
+zeta = 0.02                 # placeholder for every mode; fit to CFD or test

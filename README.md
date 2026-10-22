@@ -13,6 +13,18 @@ The baseline tank, diaphragm and required outputs are defined in [PROBLEM_STATEM
 
 **New users: start with the [user manual](docs/USER_MANUAL.md)**, which covers installation, running load cases and regenerating parameters.
 
+## Customer cases
+Each customer tank/diaphragm problem is a folder under `cases/` with one input file, `case.toml` (tank, diaphragm, material, ribs, liquid, orbit and/or 1 g, fills, mesh, damping placeholder, which inputs are estimates). One shared code base runs every case:
+```bash
+py -3.12 -m tankslosh.run_case cases/top-hat-95pct-2mm
+```
+It writes the Level A tables (`orbit_emm.json`, `ground_emm.json`), CSVs, plots and a generated `results.md` into `cases/<name>/output/`. To add a design, copy the closest case folder and edit its `case.toml`; see [Setting up a new customer case](docs/USER_MANUAL.md#7-setting-up-a-new-customer-case). Use case folders rather than one git branch per case, so model fixes reach every case.
+
+| Case | Diaphragm |
+|---|---|
+| [`cases/top-hat-95pct-2mm`](cases/top-hat-95pct-2mm/output/results.md) | Current baseline: ribbed top hat, brim z = 0.2 m, 2 mm web, stress-free at 95 % (orbit + 1 g) |
+| [`cases/cup-50pct-3mm`](cases/cup-50pct-3mm/output/results.md) | Previous baseline: plain 3 mm cup, stress-free at 50 % (orbit) |
+
 ## Layout
 | File | Contents |
 |---|---|
@@ -25,6 +37,8 @@ The baseline tank, diaphragm and required outputs are defined in [PROBLEM_STATEM
 | `docs/top_hat_baseline.md` | **Current baseline results** (ribbed top hat): statics, orbit and 1-g modes, confidence, shaker-test notes |
 | `examples/slosh_modes.py` | 5–95 % fill sweep of lateral and axial modes; writes `examples/output/baseline_emm.json` for `simulate` |
 | `examples/diaphragm_statics.py` | 5–95 % fill sweep of diaphragm shape, Δp and stretch |
+| `tankslosh/cases.py`, `tankslosh/run_case.py` | Case files: read `cases/<name>/case.toml` into library objects; the runner (`python -m tankslosh.run_case`) |
+| `cases/` | One folder per customer case: `case.toml` and `output/` |
 | `tankslosh/freesurface.py` | Analytic free-surface cylinder values (Abramson SP-106 / Dodge 2000), Bond number, viscous damping estimate |
 | `tankslosh/simulate.py` | `simulate_prescribed` (tank motion given) and `simulate_coupled` (thruster force on the dry structure) |
 | `tankslosh/inputs.py` | Time grid, trapezoid pulse, stacking per-axis inputs into (N, 3) |

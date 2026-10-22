@@ -412,16 +412,20 @@ def lateral_emm_table(ds: DiaphragmStatics, fills: Sequence[float], n_keep: int 
 
 def emm_table(ds: DiaphragmStatics, fills: Sequence[float], n_keep_lat: int = 3,
               n_keep_ax: int = 2, zeta: float = 0.02, h_mesh: float = 0.005,
-              sweep_kwargs: Optional[dict] = None):
+              sweep_kwargs: Optional[dict] = None, fluid: Fluid = WATER_20C,
+              sols: Optional[Sequence[StaticSolution]] = None,
+              notes: str = "Level B lateral + axial slosh modes, baseline diaphragm tank"):
     """Lateral + axial Level A parameter table over fill. The numbers of lateral and
     axial modes kept are the same at every fill (EMMTable interpolation needs equal
     counts). sweep_kwargs go to DiaphragmStatics.sweep (e.g. max_step=0.01 for
-    rolling diaphragms)."""
-    sols = ds.sweep(fills, **(sweep_kwargs or {}))
-    lat = [lateral_modes(ds, s, h_mesh=h_mesh) for s in sols]
-    ax = [axial_modes(ds, s, h_mesh=h_mesh) for s in sols]
+    rolling diaphragms); pass sols (from ds.sweep) instead to reuse static shapes
+    already solved, in which case fills is ignored."""
+    if sols is None:
+        sols = ds.sweep(fills, **(sweep_kwargs or {}))
+    lat = [lateral_modes(ds, s, fluid=fluid, h_mesh=h_mesh) for s in sols]
+    ax = [axial_modes(ds, s, fluid=fluid, h_mesh=h_mesh) for s in sols]
     n_ax = min(min(len(a.dominant(n_keep_ax)) for a in ax), n_keep_ax)
     n_lat = min(min(len(lm.dominant(n_keep_lat)) for lm in lat), n_keep_lat)
     table = EMMTable(entries=[combined_emm(lm, am, n_lat, n_ax, zeta) for lm, am in zip(lat, ax)],
-                     notes="Level B lateral + axial slosh modes, baseline diaphragm tank")
-    return table, lat, ax, sols
+                     notes=notes)
+    return table, lat, ax, list(sols)

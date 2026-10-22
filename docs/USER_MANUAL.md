@@ -14,7 +14,7 @@ This manual explains how to run the slosh models from your own Python scripts. N
 | **B: physics model** (`tankslosh.diaphragm_static`, `tankslosh.modal`) | The diaphragm is a large-deformation rubber shell. The liquid is potential flow. Static shapes and vibration modes are computed and turned into Level A parameters | about 1.5 min (plain cup) to 17 min (ribbed top hat) for a full 5–95 % fill table | Produce or update the Level A parameters when the tank, diaphragm or material changes |
 
 Normal workflow:
-1. Level B makes a parameter table, `baseline_emm.json`.
+1. Level B makes a parameter table for each tank design (a *case*, section 7), for example `cases/top-hat-95pct-2mm/output/orbit_emm.json`.
 2. Level A runs any number of load cases with it.
 
 A ready-made table for the baseline tank is included, so most users only need Level A.
@@ -74,7 +74,7 @@ Each script writes its plots and CSV files to `examples/output/`.
 | `python examples/damping_sensitivity.py 0.01 0.02 0.04` | Effect of the damping ratio on pulse response and resonance | seconds |
 | `python examples/property_sensitivity.py` | Effect of rubber stiffness, thickness and density on the results. `--plot` redraws from the cache | about 7 min |
 
-To change the tank or the diaphragm, edit the numbers in `tankslosh/geometry.py` (`BASELINE_TANK`, `BASELINE_DIAPHRAGM`), or build your own objects as in section 6. Then rerun `examples/slosh_modes.py`.
+To analyse a changed tank or diaphragm, set up a case (section 7): copy a folder under `cases/`, edit its `case.toml` and run `python -m tankslosh.run_case cases/<name>`. The scripts above are kept as references for the baseline; section 6 shows how to build the objects yourself for one-off studies.
 
 ---
 
@@ -292,7 +292,91 @@ This gives the classical flat-bottom cylinder values. Use it to check a CFD set-
 
 ---
 
-## 7. How far to trust the results
+## 7. Setting up a new customer case
+
+Each customer tank and diaphragm is a **case**: a folder `cases/<name>/` holding one input file, `case.toml`, and the results in `cases/<name>/output/`. All cases are run by the same code, so a fix or improvement to the model reaches every case when you rerun it. **Do not make a git branch per case**; add a case folder on the main line instead.
+
+Cases supplied:
+
+| Case | Diaphragm | Run time |
+|---|---|---|
+| `cases/top-hat-95pct-2mm` | Current baseline: ribbed top hat, brim at z = 0.2 m, 2 mm web, stress-free at 95 %; orbit and 1 g | about 35 min |
+| `cases/cup-50pct-3mm` | Previous baseline: plain 3 mm cup, stress-free at 50 %; orbit | about 2 min |
+
+### 7.1 Steps
+1. **Copy the closest case** and give the folder a short descriptive name, for example `cases/top-hat-90pct-2p5mm`:
+   ```bash
+   cp -r cases/top-hat-95pct-2mm cases/top-hat-90pct-2p5mm
+   ```
+   Delete the copied `output/` folder.
+2. **Edit `case.toml`.** Change `name`, `description`, the dimensions and the material. List every input that is a guess under `estimated`; the list is printed in the results.
+3. **Try a few fills first** to check the set-up (writes to a scratch folder, not the case's `output/`):
+   ```bash
+   python -m tankslosh.run_case cases/top-hat-90pct-2p5mm --fills 0.3,0.6,0.9 --out scratch/check
+   ```
+4. **Run the full case:**
+   ```bash
+   python -m tankslosh.run_case cases/top-hat-90pct-2p5mm
+   ```
+   Long runs can be left in a separate terminal. `--no-ground` skips the 1-g modes.
+5. **Read `output/results.md`**, look at the plots, and commit the case folder (input and output together).
+6. After changing only `description`, `estimated` or `notes`, refresh the report without rerunning:
+   ```bash
+   python -m tankslosh.run_case cases/top-hat-90pct-2p5mm --report-only
+   ```
+
+### 7.2 What the runner writes (`cases/<name>/output/`)
+
+| File | Contents |
+|---|---|
+| `results.md` | Inputs, estimated inputs, statics summary, mode tables per fill, unstable fills, code version |
+| `statics.csv`, `statics.png`, `shapes.npz` | Orbit static shapes, pressure difference, stretch, wall contact |
+| `orbit_emm.json` | Level A parameter table for orbit; load with `ts.EMMTable.load_json` |
+| `orbit_modes.csv` | Dominant lateral (f, slosh-mass fraction, height) and axial modes per fill, stability flags |
+| `orbit_lateral.png`, `orbit_axial.png`, `orbit_pulse_response.png` | Modes against fill; Level A response to 1 mm/s² lateral and axial pulses |
+| `ground_statics.csv`, `ground_emm.json`, `ground_modes.csv`, `ground_modes.png` | The same at 1 g, gas on top (only when `ground_test = true`). Level A runs with this table need specific force z = +g |
+
+### 7.3 `case.toml` reference
+Lengths in m, pressures in Pa, densities in kg/m³. Keys with a default may be left out.
+
+| Key | Meaning | Default |
+|---|---|---|
+| `name`, `description` | Case name and a few lines of description for `results.md` | folder name, empty |
+| `estimated` | List of inputs that are estimates (free text) | empty |
+| `notes` | Anything else to print in `results.md` | empty |
+| **`[tank]`** `radius`, `height` | Inner radius; inner height apex to apex | required |
+| `head_ratio` | Radius / head depth: 2 for 2:1 elliptical heads, 1 for hemispherical | 2.0 |
+| `mount_point` | Reference point for moments in the Level A pulse runs, `[x, y, z]` | `[R, 0, H/2]` |
+| **`[diaphragm]`** `type` | `top_hat`, `cup`, `meridian` (points file) or `hemisphere` (molded to the upper head, stress-free full) | required |
+| `stress_free_fill` | Fill at which the molded shape is unstressed | required (not for `hemisphere`) |
+| `brim_z`, `lip` | `top_hat`: clamp height on the wall; height of the flare from clamp to sidewall. The gap to the wall is solved from `stress_free_fill` | –, 0.01 |
+| `clamp_z` | `cup`: clamp height on the wall (straight section) | – |
+| `points_file` | `meridian`: CSV of `r, z` (m) of the molded mid-surface, clamp first, last point on the axis (r = 0); `#` lines are comments. See 6.3 for computing `stress_free_fill` | – |
+| `thickness`, `density` | Web thickness and rubber density | required |
+| `material` | `neo-hookean` (needs `shear_modulus`) or `linear` (needs `youngs_modulus`, optional `poisson`) | `neo-hookean` |
+| `bending` | Include bending stiffness (leave on for real designs) | true |
+| `segments` | Meridian mesh; ignored for `meridian` (the file's points are used) | 150 top hat, 100 others |
+| **`[diaphragm.ribs]`** `count`, `height`, `width` | Radial ribs, smeared (omit the table for a plain sheet) | none |
+| **`[liquid]`** `preset` | Liquid property set; any field (`density`, `kinematic_viscosity`, `surface_tension`, `bulk_modulus`) can be overridden | `water_20c` |
+| **`[environment]`** `orbit` | Statics and modes without gravity | true |
+| `ground_test`, `g` | Also compute modes at `g` with the tank axis vertical and gas on top | false, 9.81 |
+| **`[analysis]`** `fills` | List, or `{ start, stop, step }` | 5–95 % in 5 % steps |
+| `sweep_max_step`, `sweep_min_step` | Continuation steps in fill for the statics; rolling diaphragms need 0.01 / 0.001 | 0.025, 0.002 |
+| `self_contact` | Keep folded layers one thickness apart | true |
+| `liquid_mesh` | Potential-flow triangle size | 0.005 |
+| `n_keep_lateral`, `n_keep_axial` | Modes kept per fill in the parameter table | 3, 2 |
+| `pulse_fills` | Fills shown in `orbit_pulse_response.png` | 25, 55, 75 % |
+| **`[damping]`** `zeta` | Damping ratio for every mode (a placeholder until fitted) | 0.02 |
+
+### 7.4 Good practice
+- **Change one thing per case** when comparing designs, and say what changed in `description`.
+- **Check convergence once per new geometry:** rerun two or three fills with more `segments` (for example 150 → 200) using `--fills` and `--out`, and note the result in `notes`.
+- **Keep model code out of cases.** If a new diaphragm needs a new feature (a new shape type, a new material), add it to `tankslosh/` with a test, so every case can use it. `tankslosh/cases.py` turns `case.toml` into library objects and holds no case numbers.
+- **Unstable fills** (sideways buckling) are listed in `results.md` and left out of the parameter table.
+
+---
+
+## 8. How far to trust the results
 
 - **Verification:** each step is checked against exact solutions in `tests/`, including inflated spheres, plates, membranes and free-surface sloshing. The documents in `docs/` list the checks and their accuracy.
 - **Mesh accuracy:**
@@ -315,7 +399,7 @@ This gives the classical flat-bottom cylinder values. Use it to check a CFD set-
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | What to do |
 |---|---|
@@ -329,10 +413,11 @@ This gives the classical flat-bottom cylinder values. Use it to check a CFD set-
 
 ---
 
-## 9. Further reading
+## 10. Further reading
 
 - `PROBLEM_STATEMENT.md`: the baseline problem and its assumptions.
 - `docs/diaphragm_statics.md`: diaphragm statics, method, checks and results.
 - `docs/slosh_modes.md`: lateral and axial modes, convergence and results.
 - `docs/model_options.md`: gravity, linear material, custom shapes, and a comparison with a published paper.
+- `cases/*/output/results.md`: results of each customer case.
 - `README.md`: file layout.
