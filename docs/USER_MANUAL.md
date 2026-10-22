@@ -300,7 +300,7 @@ Cases supplied:
 
 | Case | Diaphragm | Run time |
 |---|---|---|
-| `cases/top-hat-95pct-2mm` | Current baseline: ribbed top hat, brim at z = 0.2 m, 2 mm web, stress-free at 95 %; orbit and 1 g | about 35 min |
+| `cases/top-hat-95pct-2mm` | Current baseline: ribbed top hat, brim at z = 0.2 m, 2 mm web, stress-free at 95 %; orbit and 1 g | about 25 min |
 | `cases/cup-50pct-3mm` | Previous baseline: plain 3 mm cup, stress-free at 50 %; orbit | about 2 min |
 
 ### 7.1 Steps

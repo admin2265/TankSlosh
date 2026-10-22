@@ -1,6 +1,6 @@
 # Customer baseline: ribbed top-hat diaphragm, 2 mm web, stress-free at 95 % fill.
 # Shape and rib layout come from a photograph; see docs/top_hat_baseline.md.
-# Run:  py -3.12 -m tankslosh.run_case cases/top-hat-95pct-2mm   (about 35 min)
+# Run:  py -3.12 -m tankslosh.run_case cases/top-hat-95pct-2mm   (about 25 min)
 
 name = "top-hat-95pct-2mm"
 description = """

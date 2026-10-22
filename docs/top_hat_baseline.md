@@ -8,7 +8,7 @@ How to reproduce the results:
 
 | Command | Output | Run time |
 |---|---|---|
-| `py -3.12 -m tankslosh.run_case cases/top-hat-95pct-2mm` | **All of the below in one run** (case folder, see the [manual](USER_MANUAL.md#7-setting-up-a-new-customer-case)): `cases/top-hat-95pct-2mm/output/` | about 35 min |
+| `py -3.12 -m tankslosh.run_case cases/top-hat-95pct-2mm` | **All of the below in one run** (case folder, see the [manual](USER_MANUAL.md#7-setting-up-a-new-customer-case)): `cases/top-hat-95pct-2mm/output/` | about 25 min |
 | `py -3.12 examples/diaphragm_statics.py` | Shapes, pressure difference, stretch | about 17 min |
 | `py -3.12 examples/slosh_modes.py` | Orbit parameter table: `examples/output/baseline_emm.json` | about 17 min |
 | `py -3.12 examples/ground_test_predictions.py` | 1-g parameter table: `examples/output/ground_test_emm.json` and `ground_test_modes.csv` | about 18 min |
