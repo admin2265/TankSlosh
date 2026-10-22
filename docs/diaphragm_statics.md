@@ -1,5 +1,7 @@
 # Diaphragm statics (Level B, step 1)
 
+> **Note (2026-10-21):** the results on this page are for the previous baseline, the plain 3 mm cup stress-free at 50 % (`CUP_3MM_DIAPHRAGM`). The example scripts and `examples/output/` now produce results for the ribbed top-hat baseline; see [top_hat_baseline.md](top_hat_baseline.md). The method and verification described here apply to both.
+
 Static shape of the baseline molded cup diaphragm over 5–95 % fill. This is the pre-stressed state that the slosh modes (step 2) are linearized about.
 
 Code:

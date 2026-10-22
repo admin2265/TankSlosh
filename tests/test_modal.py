@@ -5,6 +5,7 @@ from scipy.linalg import eigh, null_space
 from scipy.special import jn_zeros
 
 from tankslosh import cylinder_free_surface
+from tankslosh import CUP_3MM_DIAPHRAGM
 from tankslosh.diaphragm_static import DiaphragmStatics
 from tankslosh.harmonic_shell import HarmonicShell
 from tankslosh.liquid_fe import (HarmonicPotential, build_mesh, surface_moment, surface_normals,
@@ -36,7 +37,7 @@ def _vacuum_modes(sh, r, z, rho):
 class TestHarmonicShell(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.ds = DiaphragmStatics(n_segments=50)
+        cls.ds = DiaphragmStatics(CUP_3MM_DIAPHRAGM, n_segments=50)
         cls.sols = cls.ds.sweep([0.2, 0.8])
 
     def test_unperturbed_energy_and_volume_match_axisymmetric(self):
@@ -120,7 +121,7 @@ class TestLiquidFE(unittest.TestCase):
 class TestBaselineModes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.ds = DiaphragmStatics(n_segments=50)
+        cls.ds = DiaphragmStatics(CUP_3MM_DIAPHRAGM, n_segments=50)
         cls.res = {round(s.fill, 2): lateral_modes(cls.ds, s) for s in cls.ds.sweep([0.1, 0.55])}
 
     def test_sanity(self):
@@ -203,7 +204,7 @@ class TestAxial(unittest.TestCase):
         self.assertLess(np.abs(phi.T @ (Z.T @ Gam)).max(), 1e-10)
 
     def test_baseline_axial(self):
-        ds = DiaphragmStatics(n_segments=50)
+        ds = DiaphragmStatics(CUP_3MM_DIAPHRAGM, n_segments=50)
         for s in ds.sweep([0.1, 0.7]):
             am = axial_modes(ds, s)
             self.assertTrue(am.stable)

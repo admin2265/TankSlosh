@@ -28,23 +28,33 @@ The model must run far faster than CFD and serve as a sanity check on StarCCM+ r
 - Treated as incompressible for slosh. The acoustic modes are around 1 kHz and are handled separately if they are ever needed.
 - Fill range: 5–95 % of the total volume, i.e. 3.35–63.67 kg. At 50 % the liquid is 33.45 kg.
 
-## Diaphragm
+## Diaphragm (baseline since 2026-10-21: ribbed top hat)
+Identified from a photograph of the actual part. Rib dimensions, clamp height and material constants are estimates.
+
 | Item | Value |
 |---|---|
-| Type | Molded elastomer cup, clamped all round at the upper head seam (z = 0.5 m, r = R) |
-| Molded (stress-free) shape | Straight sidewall at r = R from z = 0.5 down to 0.3667 m, then a 2:1 elliptical dome (same shape as the heads) down to the apex at z = 0.2667 m |
-| Stress-free fill | 50 %. Liquid below the cup = 33.51 L |
-| Meridian length | 0.1333 m sidewall + 0.2422 m dome = 0.3755 m |
-| Thickness | 3 mm (molded) |
-| Material | Shore 70A rubber, neo-Hookean, shear modulus μ ≈ 1.8 MPa (*assumed*, from Gent's Shore-to-modulus conversion; replace with datasheet value), nearly incompressible |
-| Density | 1150 kg/m³ (*assumed*) |
-| Wall contact | Frictionless sliding |
+| Type | Molded elastomer "top hat", off-white, with radial ribs. Clamped all round at its brim on the wall at **z = 0.2 m** (*estimated*: makes the hat about as tall as it is wide, as in the photo) |
+| Molded (stress-free) shape | Short flare (10 mm) in from the clamp, then a straight sidewall at r = R − gap up to the head seam (z = 0.5 m), then a dome following the upper head offset inward by the gap, to the apex at z = 0.594 m |
+| Gap to the wall | 6.37 mm, chosen so the gas between the hat and the upper wall is exactly 5 % of the tank volume when the hat is undeformed |
+| Stress-free fill | **95 %**. Liquid inside the hat; N₂ in the thin layer between the hat and the top of the tank |
+| Meridian length | 0.534 m |
+| Web thickness | **2 mm** (measured) |
+| Ribs | About 36 radial ribs on the outer (gas) side, assumed 2 mm high × 3 mm wide, running from the brim over the dome to the apex (*estimated from the photo*). Modelled as smeared meridional stiffening (membrane fibres plus a T-section in bending) that becomes a solid 4 mm section where the ribs merge near the apex |
+| Material | Silica-filled EPDM class (off-white, tensile strength 1650 psi = 11.4 MPa). Neo-Hookean, shear modulus μ ≈ 1.8 MPa (*assumed*, about Shore 70A), nearly incompressible |
+| Density | 1150 kg/m³ (*assumed*). Mass with ribs is about 1.34 kg |
+| Wall contact | Frictionless sliding. Folded layers of the diaphragm are kept at least one wall thickness (2 mm) apart (self-contact) |
 | Gas side | N₂, quasi-static. Its absolute pressure does not affect slosh, because the gas volume is fixed by the liquid volume; only the pressure difference across the diaphragm enters, and the model computes it. |
 
-### What the diaphragm has to do across the fill range
-- **5 % fill:** the dome nests about 27 mm above the lower head (dome equator at z ≈ 0.127 m). The meridian has to grow from 0.376 m to about 0.616 m. The average stretch is about 1.64. If only the sidewall stretches, the stretch is about 2.8. Shore 70A typically breaks at 250–400 % elongation, so this is within its limits.
-- **95 % fill:** the dome has to **invert** into the upper head. The 0.133 m sidewall then has nowhere to go and forms a **rolling fold** (convolution) next to the wall. Expect snap-through of the dome and possibly non-axisymmetric folding. The diaphragm model must check for this (an m = 1 stability check).
-- **Near 50 % fill:** the diaphragm is close to stress-free, so its stiffness comes from **bending** (the 3 mm shell) more than from membrane tension. The diaphragm model must therefore be a shell, not just a membrane.
+### What the diaphragm does across the fill range
+- **95 % fill:** the stress-free shape.
+- **Below 95 %:**
+  - The crown descends, staying almost flat.
+  - The top of the sidewall rolls inward into a U-shaped fold, which travels down the wall as the tank empties. This is a classic rolling diaphragm.
+  - Stretches stay within a few percent, so the pressure difference across the diaphragm is small. Bending (web plus ribs) and the fold geometry control the stiffness.
+- **Below about 52 % fill:** the two layers of the fold close onto each other. The liquid sliver between them is squeezed out, and the layers are held one thickness apart by self-contact.
+
+### Previous baseline (kept for reference and as verification cases)
+`CUP_3MM_DIAPHRAGM`: a plain 3 mm cup clamped at the upper head seam (z = 0.5 m), stress-free at 50 % fill. Its results are documented in `docs/diaphragm_statics.md` and `docs/slosh_modes.md`, and the original verification tests use it.
 
 ## Loading
 - Translational acceleration only, no tank rotation, small amplitude (linear slosh).

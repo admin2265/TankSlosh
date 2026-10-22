@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 
+from tankslosh import CUP_3MM_DIAPHRAGM
 from tankslosh.diaphragm_static import DiaphragmStatics, ShellStaticSolver
 from tankslosh.shell import AxisymmetricShell
 
@@ -10,7 +11,7 @@ MU = 1.8e6
 
 class TestShellEnergy(unittest.TestCase):
     def test_gradients_match_finite_differences(self):
-        ds = DiaphragmStatics(n_segments=40)
+        ds = DiaphragmStatics(CUP_3MM_DIAPHRAGM, n_segments=40)
         sh = ds.shell
         rng = np.random.default_rng(1)
         r = sh.r0 + 2e-3 * rng.standard_normal(sh.N + 1)
@@ -64,7 +65,7 @@ class TestStaticSolver(unittest.TestCase):
 class TestBaselineDiaphragm(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.ds = DiaphragmStatics(n_segments=50)
+        cls.ds = DiaphragmStatics(CUP_3MM_DIAPHRAGM, n_segments=50)
         cls.sols = {round(s.fill, 3): s for s in cls.ds.sweep([0.1, 0.29, 0.31, 0.5, 0.7])}
 
     def test_all_converged(self):

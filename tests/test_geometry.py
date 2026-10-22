@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from scipy.integrate import quad
 
-from tankslosh import BASELINE_DIAPHRAGM, BASELINE_MOUNT_POINT, BASELINE_TANK
+from tankslosh import BASELINE_MOUNT_POINT, BASELINE_TANK, CUP_3MM_DIAPHRAGM
 
 
 class TestTank(unittest.TestCase):
@@ -26,7 +26,7 @@ class TestTank(unittest.TestCase):
 
 class TestCup(unittest.TestCase):
     def test_molded_shape(self):
-        d = BASELINE_DIAPHRAGM
+        d = CUP_3MM_DIAPHRAGM
         self.assertAlmostEqual(d.dome_equator_z, 0.36667, places=5)
         self.assertAlmostEqual(d.apex_z, 0.26667, places=5)
         self.assertAlmostEqual(d.meridian_length, 0.37554, places=5)
@@ -36,7 +36,7 @@ class TestCup(unittest.TestCase):
         self.assertAlmostEqual(v / t.volume, 0.5, places=12)
 
     def test_mass(self):
-        d = BASELINE_DIAPHRAGM
+        d = CUP_3MM_DIAPHRAGM
         a, b = d.tank.radius, d.tank.head_depth
         # dome area by surface-of-revolution integral
         area = quad(lambda th: 2 * np.pi * a * np.sin(th) * np.hypot(a * np.cos(th), b * np.sin(th)),

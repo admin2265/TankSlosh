@@ -1,5 +1,7 @@
 # Slosh modes (Level B, step 2)
 
+> **Note (2026-10-21):** the results on this page are for the previous baseline, the plain 3 mm cup stress-free at 50 % (`CUP_3MM_DIAPHRAGM`). The example scripts and `examples/output/` now produce results for the ribbed top-hat baseline; see [top_hat_baseline.md](top_hat_baseline.md). The method and verification described here apply to both.
+
 These are the small oscillations of the diaphragm and liquid about each static shape from [step 1](diaphragm_statics.md), sideways (m = 1) and axial (m = 0), converted into the spring-mass parameters (Level A) used by `tankslosh.simulate`.
 
 Code:

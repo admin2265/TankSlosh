@@ -11,7 +11,7 @@ This manual explains how to run the slosh models from your own Python scripts. N
 | Level | What it is | Speed | Use it to |
 |---|---|---|---|
 | **A: spring-mass model** (`tankslosh.simulate`) | The liquid is a fixed mass plus a few spring-mass oscillators, with parameters that depend on fill level | milliseconds per run | Get the force and moment on the tank, the liquid CG motion and the accelerometer signal for any acceleration or thrust history |
-| **B: physics model** (`tankslosh.diaphragm_static`, `tankslosh.modal`) | The diaphragm is a large-deformation rubber shell. The liquid is potential flow. Static shapes and vibration modes are computed and turned into Level A parameters | about 1.5 min for a full 5–95 % fill table | Produce or update the Level A parameters when the tank, diaphragm or material changes |
+| **B: physics model** (`tankslosh.diaphragm_static`, `tankslosh.modal`) | The diaphragm is a large-deformation rubber shell. The liquid is potential flow. Static shapes and vibration modes are computed and turned into Level A parameters | about 1.5 min (plain cup) to 17 min (ribbed top hat) for a full 5–95 % fill table | Produce or update the Level A parameters when the tank, diaphragm or material changes |
 
 Normal workflow:
 1. Level B makes a parameter table, `baseline_emm.json`.
@@ -21,7 +21,7 @@ A ready-made table for the baseline tank is included, so most users only need Le
 
 **The baseline tank** (see `PROBLEM_STATEMENT.md`):
 - **Tank:** cylinder, 0.4 m diameter, 0.6 m tall overall, with 2:1 elliptical heads. Volume 67 L, water.
-- **Diaphragm:** a molded rubber cup, 3 mm thick, Shore 70A. It is clamped at the upper head seam (z = 0.5 m) and stress-free at 50 % fill.
+- **Diaphragm:** a molded rubber "top hat" with radial ribs. The web is 2 mm thick, with about 36 ribs on the gas side, and the material is EPDM-class rubber (μ ≈ 1.8 MPa, assumed). Its brim is clamped to the wall at z = 0.2 m. It lines the upper tank with a 6.4 mm gas gap and is stress-free at 95 % fill. As the tank empties it rolls into a U-shaped fold. The previous 3 mm cup baseline is still available as `ts.CUP_3MM_DIAPHRAGM`.
 - **Fill range:** 5–95 %. The environment is orbit (no gravity).
 - **Reported loads:** at the side mount at mid-height, point (0.2, 0, 0.3) m.
 
@@ -68,8 +68,9 @@ Each script writes its plots and CSV files to `examples/output/`.
 | Command | What it does | Run time |
 |---|---|---|
 | `python examples/demo.py` | Level A demo: a 1-g free-surface reference case, plus an orbit case with placeholder parameters | seconds |
-| `python examples/diaphragm_statics.py` | Diaphragm shape, pressure difference and stretch at 5–95 % fill | about 1.5 min |
-| `python examples/slosh_modes.py` | Lateral and axial slosh modes over fill. **Rewrites `baseline_emm.json`**, then runs Level A pulses with it | about 1.5 min |
+| `python examples/diaphragm_statics.py` | Diaphragm shape, pressure difference and stretch at 5–95 % fill | about 17 min for the top hat (1.5 min for the old cup) |
+| `python examples/ground_test_predictions.py` | 1-g slosh modes for a shaker test of the baseline tank; writes `ground_test_emm.json` and `ground_test_modes.csv` | about 18 min |
+| `python examples/slosh_modes.py` | Lateral and axial slosh modes over fill. **Rewrites `baseline_emm.json`**, then runs Level A pulses with it | about 17 min for the top hat |
 | `python examples/damping_sensitivity.py 0.01 0.02 0.04` | Effect of the damping ratio on pulse response and resonance | seconds |
 | `python examples/property_sensitivity.py` | Effect of rubber stiffness, thickness and density on the results. `--plot` redraws from the cache | about 7 min |
 
@@ -181,17 +182,31 @@ d = dataclasses.replace(ts.BASELINE_DIAPHRAGM,
                         thickness=3.5e-3,        # m
                         density=1200.0)          # kg/m^3
 ds = DiaphragmStatics(d, n_segments=100)
-table, lateral, axial, statics = emm_table(ds, fills=[0.3, 0.55, 0.8], zeta=0.02)
+table, lateral, axial, statics = emm_table(ds, fills=[0.3, 0.55, 0.8], zeta=0.02,
+                                           sweep_kwargs=dict(max_step=0.01))
 table.save_json("my_table.json")
 for lm in lateral:
     i = lm.dominant(1)[0]
     print(f"{lm.fill:.0%}: f1 = {lm.freq_hz[i]:.2f} Hz, slosh mass = {lm.slosh_mass[i]:.2f} kg")
 ```
-- **Fill list:** use `fills=np.round(np.arange(0.05, 0.951, 0.05), 3)` for a full table, which takes about 1.5 min. `EMMTable.at` interpolates between the fills you computed.
+- **Fill list:** use `fills=np.round(np.arange(0.05, 0.951, 0.05), 3)` for a full table. That takes about 1.5 min for a plain cup and about 17 min for the ribbed top hat. `EMMTable.at` interpolates between the fills you computed.
 - **Stiffness only:** if just μ changes, every frequency scales exactly with √μ. Masses and heights do not change.
 - **Accuracy at high fill:** for final numbers at 80–90 % fill, use `n_segments=200`. It is about 4× slower, and the 100-segment results read up to 8 % low there.
 
-### 6.2 Different tank size or cup
+### 6.2 Top hat with different dimensions
+```python
+import tankslosh as ts
+hat = ts.top_hat_diaphragm(ts.BASELINE_TANK, stress_free_fill=0.95, brim_z=0.2, n_segments=150,
+                           thickness=2e-3, density=1150.0, shear_modulus=1.8e6,
+                           ribs=ts.RibSpec(count=36, height=2e-3, width=3e-3))
+print(f"gap to wall {hat.gap*1e3:.2f} mm, mass {hat.mass:.3f} kg")
+```
+- **Gap:** chosen automatically so the gas layer is `1 − stress_free_fill` of the tank when the hat is undeformed.
+- **Ribs:** `ribs=None` gives a plain sheet.
+- **Folding:** folded layers are kept at least one thickness apart (self-contact, on by default in `DiaphragmStatics`).
+- **Sweep steps:** use `ds.sweep(fills, max_step=0.01)` for rolling diaphragms. Smaller continuation steps let the fold develop smoothly.
+
+### 6.2b Different tank size or cup
 ```python
 import tankslosh as ts
 tank = ts.EllipticalHeadTank(radius=0.25, height=0.8, head_ratio=2.0)     # head depth = radius / head_ratio
@@ -253,7 +268,7 @@ import tankslosh as ts
 from tankslosh.diaphragm_static import DiaphragmStatics
 from tankslosh.modal import lateral_modes, axial_modes
 ds = DiaphragmStatics(ts.BASELINE_DIAPHRAGM)
-sol = ds.sweep([0.3])[0]           # sweep() walks there from the stress-free fill; robust for any fill
+sol = ds.sweep([0.85], max_step=0.01)[0]   # sweep() walks there from the stress-free fill; robust for any fill
 print("dp = p_liquid - p_gas [Pa]:", sol.dp, " max stretch:", sol.max_stretch)
 lm, am = lateral_modes(ds, sol), axial_modes(ds, sol)
 print("lateral f [Hz]:", lm.freq_hz[:4], " slosh mass [kg]:", lm.slosh_mass[:4])
@@ -293,7 +308,10 @@ This gives the classical flat-bottom cylinder values. Use it to check a CFD set-
   - Axisymmetric diaphragm shapes, so real non-axisymmetric wrinkling is not captured. This matters most in the 55–65 % "soft band" and the folded high-fill states.
   - Frictionless wall contact.
   - Incompressible liquid. Gas pressure does not affect slosh.
-- **Soft band (55–65 % fill):** first lateral mode about 1–3 Hz. This is the least certain region and the most important one to check against CFD or test.
+- **Ribbed top-hat baseline:**
+  - The diaphragm is slack and rolls, so modes are about 0.5–7 Hz.
+  - Several fills are flagged unstable to sideways buckling, and the model cannot follow that buckling.
+  - See `docs/top_hat_baseline.md` for confidence by fill. The parameter table leaves out unstable modes, and each entry's `notes` says when its fill is unstable.
 
 ---
 

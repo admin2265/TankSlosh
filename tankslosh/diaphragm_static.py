@@ -79,6 +79,7 @@ class StaticSolution:
     stretch_hoop: np.ndarray
     self_intersections: list = field(default_factory=list)
     fill: Optional[float] = None
+    self_contact: list = field(default_factory=list)   # (node i, segment j, t) pairs touching
 
     @property
     def max_stretch(self) -> float:
@@ -97,9 +98,13 @@ class StaticSolution:
 class ShellStaticSolver:
     """Minimize shell energy with fixed enclosed volume and optional wall contact."""
 
-    def __init__(self, shell: AxisymmetricShell, contact: Optional[WallContact] = None):
+    def __init__(self, shell: AxisymmetricShell, contact: Optional[WallContact] = None,
+                 self_contact_gap: Optional[float] = None):
+        """self_contact_gap: if set, folded layers of the diaphragm are kept at least
+        this far apart (mid-surface to mid-surface, i.e. one wall thickness)."""
         self.shell = shell
         self.contact = contact
+        self.gap = self_contact_gap
         self.N = shell.N
         self.U_scale = shell.mu * shell.t * shell.area0
         self.V_scale = shell.area0 * float(np.sum(shell.L0)) * 0.1
@@ -116,6 +121,48 @@ class ShellStaticSolver:
 
     def _pack_grad(self, gr, gz):
         return np.concatenate([gr[1:self.N], gz[1:]])
+
+    # ---------- self-contact of folded layers ----------
+    def _pair_geometry(self, r, z, i, j):
+        """Signed distance of node i from the line of segment j (normal = rotated
+        tangent), its projection t and the geometric vectors for the gradient."""
+        P = np.column_stack([r, z])
+        a, b = P[j], P[j + 1]
+        u = b - a
+        L = np.hypot(u[:, 0], u[:, 1])
+        n = np.column_stack([-u[:, 1], u[:, 0]]) / L[:, None]
+        w = P[i] - a
+        d = np.sum(w * n, 1)
+        t = np.sum(w * u, 1) / L ** 2
+        return d, t, n, u, w, L
+
+    def contact_pairs(self, r, z):
+        """Candidate (i, j, side) for node i near non-adjacent segment j."""
+        if self.gap is None:
+            return np.zeros((0, 3))
+        N = self.N
+        P = np.column_stack([r, z])
+        A, B = P[:-1], P[1:]
+        U = B - A
+        L2 = np.sum(U * U, 1)
+        n = np.column_stack([-U[:, 1], U[:, 0]]) / np.sqrt(L2)[:, None]
+        W = P[1:, None, :] - A[None, :, :]                     # nodes 1..N vs segments
+        t = np.sum(W * U[None], -1) / L2[None]
+        d = np.sum(W * n[None], -1)
+        ii = np.arange(1, N + 1)[:, None]
+        jj = np.arange(N)[None, :]
+        far = (np.abs(ii - jj) > 3) & (np.abs(ii - jj - 1) > 3)
+        cand = far & (t > -0.05) & (t < 1.05) & (np.abs(d) < max(8 * self.gap, 0.015))
+        a_i, a_j = np.nonzero(cand)
+        side = np.sign(d[a_i, a_j])
+        side[side == 0] = 1.0
+        return np.column_stack([a_i + 1, a_j, side])
+
+    def _xindex(self, node, comp):
+        N = self.N
+        if node == 0 or (comp == 0 and node == N):
+            return -1
+        return node - 1 if comp == 0 else N - 1 + node - 1
 
     def solve(self, target_volume: float, r_init=None, z_init=None,
               maxiter: int = 2000) -> StaticSolution:
@@ -157,12 +204,40 @@ class ShellStaticSolver:
 
             cons.append({"type": "ineq", "fun": con_g, "jac": con_jac})
 
+        pairs = self.contact_pairs(r_init, z_init)
+        if len(pairs):
+            pi, pj, ps = pairs[:, 0].astype(int), pairs[:, 1].astype(int), pairs[:, 2]
+            gap = self.gap
+            idx = [[self._xindex(k, c) for k in (pi_, pj_, pj_ + 1) for c in (0, 1)]
+                   for pi_, pj_ in zip(pi, pj)]
+            idx = np.array(idx)
+            nx = 2 * N - 1
+
+            def sc_g(x):
+                r, z = self._unpack(x)
+                d = self._pair_geometry(r, z, pi, pj)[0]
+                return ps * d - gap
+
+            def sc_jac(x):
+                r, z = self._unpack(x)
+                d, _, n, u, w, L = self._pair_geometry(r, z, pi, pj)
+                Jw = np.column_stack([w[:, 1], -w[:, 0]])
+                db = (Jw - u * (d / L)[:, None]) / L[:, None]
+                da = -n - db
+                G = np.hstack([n, da, db]) * ps[:, None]      # (np, 6): node i, a, b x (r, z)
+                J = np.zeros((len(pi), nx + 1))
+                rows = np.repeat(np.arange(len(pi)), 6)
+                np.add.at(J, (rows, np.where(idx.ravel() >= 0, idx.ravel(), nx)), G.ravel())
+                return J[:, :nx]
+
+            cons.append({"type": "ineq", "fun": sc_g, "jac": sc_jac})
+
         res = minimize(fun, x0, jac=True, method="SLSQP", constraints=cons,
                        options={"maxiter": maxiter, "ftol": 1e-13})
         r, z = self._unpack(res.x)
-        return self._finish(target_volume, r, z, res)
+        return self._finish(target_volume, r, z, res, pairs)
 
-    def _finish(self, target_volume, r, z, res) -> StaticSolution:
+    def _finish(self, target_volume, r, z, res, pairs=np.zeros((0, 3))) -> StaticSolution:
         sh = self.shell
         U, gr, gz = sh.energy(r, z, grad=True)
         _, vr, vz = sh.enclosed_volume(r, z, grad=True)
@@ -173,8 +248,19 @@ class ShellStaticSolver:
             contact_nodes = np.where(gc < 1e-6)[0] + 1
         else:
             contact_nodes = np.array([], dtype=int)
+        touching = []
+        sc_pen = 0.0
+        if len(pairs):
+            pi, pj, ps = pairs[:, 0].astype(int), pairs[:, 1].astype(int), pairs[:, 2]
+            d, t = self._pair_geometry(r, z, pi, pj)[:2]
+            s = ps * d - self.gap
+            sc_pen = max(0.0, -float(s.min()))
+            act = s < 1e-6
+            touching = [(int(a), int(b), float(c)) for a, b, c in zip(pi[act], pj[act], t[act])]
         free = np.ones(self.N + 1, dtype=bool)
         free[contact_nodes] = False
+        for a, b, _ in touching:
+            free[[a, b, b + 1]] = False
         mask = np.concatenate([free[1:self.N], free[1:]])
         lam = float(gU[mask] @ gV[mask] / (gV[mask] @ gV[mask]))  # dU/dV_d
         resid = float(np.linalg.norm(gU[mask] - lam * gV[mask]) /
@@ -184,33 +270,38 @@ class ShellStaticSolver:
         # precision; judge convergence by the constraint and equilibrium errors.
         vol_err = abs(sh.enclosed_volume(r, z) - target_volume) / self.V_scale
         pen = 0.0 if self.contact is None else max(0.0, -float(self.contact.g(r[1:], z[1:]).min()))
-        converged = bool(res.success) or (vol_err < 1e-8 and pen < 1e-8 and resid < 1e-3)
+        converged = (bool(res.success) and sc_pen < 1e-7) or \
+            (vol_err < 1e-8 and pen < 1e-8 and sc_pen < 1e-7 and resid < 1e-3)
         return StaticSolution(target_volume=target_volume, r=r, z=z, energy=float(U),
                               dp=-lam, equilibrium_residual=resid,
                               converged=converged, message=str(res.message),
                               contact_nodes=contact_nodes, stretch_meridional=l1,
-                              stretch_hoop=l2, self_intersections=self_intersections(r, z))
+                              stretch_hoop=l2, self_intersections=self_intersections(r, z),
+                              self_contact=touching)
 
 
 class DiaphragmStatics:
     """Static diaphragm shapes for a molded cup diaphragm in an elliptical-head tank."""
 
-    def __init__(self, diaphragm=BASELINE_DIAPHRAGM, n_segments: int = 100, gravity=None):
+    def __init__(self, diaphragm=BASELINE_DIAPHRAGM, n_segments: int = 100, gravity=None,
+                 self_contact: bool = True):
         """diaphragm: MoldedCupDiaphragm or MeridianDiaphragm (its own points are used,
-        n_segments is then ignored). gravity: None (orbit) or (g, liquid density)."""
+        n_segments is then ignored). gravity: None (orbit) or (g, liquid density).
+        self_contact: keep folded layers at least one wall thickness apart."""
         self.d = diaphragm
         if hasattr(diaphragm, "r0"):
             r0, z0 = np.asarray(diaphragm.r0, float), np.asarray(diaphragm.z0, float)
             self.shell = AxisymmetricShell(
                 r0, z0, diaphragm.shear_modulus, diaphragm.thickness, nu=diaphragm.poisson,
                 material=diaphragm.material, youngs_modulus=diaphragm.youngs_modulus,
-                bending=diaphragm.bending)
+                bending=diaphragm.bending, ribs=getattr(diaphragm, "ribs", None))
         else:
             r0, z0 = cup_reference_meridian(diaphragm, n_segments)
             self.shell = AxisymmetricShell(r0, z0, diaphragm.shear_modulus, diaphragm.thickness)
         if gravity is not None:
             self.shell.set_gravity(gravity[0], gravity[1], diaphragm.density)
-        self.solver = ShellStaticSolver(self.shell, WallContact(diaphragm.tank))
+        self.solver = ShellStaticSolver(self.shell, WallContact(diaphragm.tank),
+                                        self_contact_gap=diaphragm.thickness if self_contact else None)
         # Measure fill changes from the discretized molded volume, so the
         # stress-free fill is exactly stress-free on this mesh.
         self.V_ref = self.shell.enclosed_volume(r0, z0)

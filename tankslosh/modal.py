@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 import numpy as np
+from matplotlib.path import Path
 from scipy.linalg import eigh, null_space
 
 from .diaphragm_static import DiaphragmStatics, StaticSolution
@@ -87,8 +88,10 @@ class LateralModes:
     def dominant(self, n_keep: int = 3, min_fraction: float = 0.002):
         """Indices of the lowest-frequency modes carrying at least min_fraction of the
         contents mass (at most n_keep)."""
+        # modes with negative stiffness (static shape unstable to this pattern) are
+        # not oscillators and are never kept
         idx = [i for i in range(len(self.freq_hz))
-               if self.slosh_mass[i] >= min_fraction * self.contents_mass]
+               if self.freq_hz[i] > 0 and self.slosh_mass[i] >= min_fraction * self.contents_mass]
         return idx[:n_keep]
 
     def emm(self, n_keep: int = 3, zeta: float = 0.02, min_fraction: float = 0.002) -> EMMParams:
@@ -101,7 +104,9 @@ class LateralModes:
         return EMMParams(liquid_mass=m, fixed_mass=m0, fixed_height=h0, lateral_modes=modes,
                          axial_modes=[], fill_fraction=self.fill,
                          notes=(f"Level B lateral modes, contents = liquid {self.liquid_mass:.3f} kg"
-                                f" + diaphragm {self.rubber_mass:.3f} kg; zeta = {zeta} placeholder"))
+                                f" + diaphragm {self.rubber_mass:.3f} kg; zeta = {zeta} placeholder"
+                                + ("" if self.stable else "; WARNING: axisymmetric shape unstable "
+                                   "to m = 1 (would buckle sideways); unstable mode left out")))
 
 
 @dataclass
@@ -109,9 +114,11 @@ class _LiquidRegion:
     contact: set          # nodes held to the wall (bilateral, frictionless)
     k_det: int            # first wetted node (diaphragm leaves the wall)
     k_end: int            # last wetted node (N, or start of a patch resting on the bottom)
-    surf: np.ndarray      # wetted surface points k_det..k_end
+    surf: np.ndarray      # wetted surface points (diaphragm nodes surf_idx)
     normals: np.ndarray   # outward (from liquid) normals of wetted segments
     mesh: object
+    surf_idx: np.ndarray = None   # diaphragm node index of each surface point
+    pairs: list = None            # self-contact pairs (i, j, t) of folded layers
 
 
 def _liquid_region(ds: DiaphragmStatics, sol: StaticSolution, h_mesh: float,
@@ -152,7 +159,23 @@ def _liquid_region(ds: DiaphragmStatics, sol: StaticSolution, h_mesh: float,
     contact |= set(range(1, k_det + 1))
     if k_end < N:
         contact |= set(range(k_end, N + 1))
-    surf = np.column_stack([sol.r[k_det:k_end + 1], sol.z[k_det:k_end + 1]])
+    idx = np.arange(k_det, k_end + 1)
+    pairs = list(getattr(sol, "self_contact", []) or [])
+    if pairs:
+        # folded layers touching: if the space between them belongs to the liquid
+        # (liquid faces touching), the squeezed-out sliver is not liquid: the wetted
+        # path runs up the outer layer to the start of contact and continues on the
+        # inner layer from the end of contact
+        A = min(min(i, j) for i, j, _ in pairs)
+        B = max(max(i, j + 1) for i, j, _ in pairs)
+        i0, j0, t0 = pairs[0]
+        p = np.array([sol.r[i0], sol.z[i0]])
+        q = (1 - t0) * np.array([sol.r[j0], sol.z[j0]]) + t0 * np.array([sol.r[j0 + 1], sol.z[j0 + 1]])
+        full = np.vstack([tank_wall_polyline(tank, None, (sol.r[k_det], sol.z[k_det]), h_mesh),
+                          np.column_stack([sol.r[idx], sol.z[idx]])])
+        if Path(np.vstack([full, full[:1]])).contains_point(0.5 * (p + q)) and k_det <= A < B <= k_end:
+            idx = np.concatenate([np.arange(k_det, A + 1), np.arange(B, k_end + 1)])
+    surf = np.column_stack([sol.r[idx], sol.z[idx]])
     p_low = None if k_end == N else surf[-1]
     wall = tank_wall_polyline(tank, p_low, surf[0], h_mesh)
     # end exactly at the detachment node (and start at the resting node), dropping
@@ -164,7 +187,31 @@ def _liquid_region(ds: DiaphragmStatics, sol: StaticSolution, h_mesh: float,
     wall = np.vstack([start, inner[far], surf[0]])
     mesh = build_mesh(wall, surf, h_mesh)
     return _LiquidRegion(contact=contact, k_det=k_det, k_end=k_end, surf=surf,
-                         normals=surface_normals(surf), mesh=mesh)
+                         normals=surface_normals(surf), mesh=mesh, surf_idx=idx, pairs=pairs)
+
+
+def _scatter_cols(local, surf_idx, n_per_node, n_total):
+    """Map columns for surface points (n_per_node DOFs each) to global diaphragm DOFs."""
+    cols = (n_per_node * np.asarray(surf_idx)[:, None] + np.arange(n_per_node)[None, :]).ravel()
+    out = np.zeros(local.shape[:-1] + (n_total,))
+    out[..., cols] += local
+    return out
+
+
+def _pair_rows(sol, pairs, n_per_node, ir, iz):
+    """Folded layers in contact move together normal to the contact."""
+    N = len(sol.r) - 1
+    n = n_per_node * (N + 1)
+    rows = []
+    for i, j, t in pairs:
+        u = np.array([sol.r[j + 1] - sol.r[j], sol.z[j + 1] - sol.z[j]])
+        nr, nz = -u[1] / np.hypot(*u), u[0] / np.hypot(*u)
+        e = np.zeros(n)
+        for node, wgt in ((i, 1.0), (j, -(1 - t)), (j + 1, -t)):
+            e[n_per_node * node + ir] += wgt * nr
+            e[n_per_node * node + iz] += wgt * nz
+        rows.append(e)
+    return rows
 
 
 def _wall_rows(ds, sol, contact, n_per_node, ir, iz):
@@ -207,13 +254,12 @@ def lateral_modes(ds: DiaphragmStatics, sol: StaticSolution, fluid: Fluid = WATE
     V_liq = tank.liquid_volume(sol.fill)
     hp = HarmonicPotential(reg.mesh, 1)
     n = 3 * (N + 1)
-    G = np.zeros((len(hp.free), n))
-    G[:, 3 * k_det:3 * (k_end + 1)] = hp.surface_load_matrix(reg.normals, 3)
+    G = _scatter_cols(hp.surface_load_matrix(reg.normals, 3), reg.surf_idx, 3, n)
     X = hp.solve(G)
     Ma = rho * np.pi * (G.T @ X)
     Ma = 0.5 * (Ma + Ma.T)
-    GamL = np.zeros(n)
-    GamL[3 * k_det:3 * (k_end + 1)] = rho * np.pi * translation_coupling(reg.surf, reg.normals, 3)
+    GamL = _scatter_cols(rho * np.pi * translation_coupling(reg.surf, reg.normals, 3),
+                         reg.surf_idx, 3, n)
     HL = rho * np.pi * (hp.c @ X)
 
     M = Ma + Ms
@@ -226,6 +272,7 @@ def lateral_modes(ds: DiaphragmStatics, sol: StaticSolution, fluid: Fluid = WATE
     e[3 * N] = e[3 * N + 1] = 1.0
     rows += [e, np.eye(n)[3 * N + 2]]
     rows += _wall_rows(ds, sol, reg.contact - {N}, 3, 0, 2)
+    rows += _pair_rows(sol, reg.pairs, 3, 0, 2)
     Z = null_space(np.array(rows))
     Kr = Z.T @ K @ Z
     Mr = Z.T @ M @ Z
@@ -258,8 +305,10 @@ class AxialModes:
         return self.min_eigenvalue > 0
 
     def dominant(self, n_keep: int = 2, min_fraction: float = 0.002):
+        # modes with negative stiffness (static shape unstable to this pattern) are
+        # not oscillators and are never kept
         idx = [i for i in range(len(self.freq_hz))
-               if self.slosh_mass[i] >= min_fraction * self.contents_mass]
+               if self.freq_hz[i] > 0 and self.slosh_mass[i] >= min_fraction * self.contents_mass]
         return idx[:n_keep]
 
     def modes(self, n_keep: int = 2, zeta: float = 0.02, min_fraction: float = 0.002):
@@ -305,7 +354,7 @@ def axial_modes(ds: DiaphragmStatics, sol: StaticSolution, fluid: Fluid = WATER_
     _check_gravity_fluid(sh, fluid)
     HU, HV = axisymmetric_hessians(sh, sol.r, sol.z)
     K = HU - (-sol.dp) * HV
-    m_nodes = ds.d.density * sh.t * sh.A0_node
+    m_nodes = sh.node_mass(ds.d.density)
     n = 2 * (N + 1)
     Ms = np.diag(np.repeat(m_nodes, 2))
     Gs = np.zeros(n)
@@ -314,21 +363,20 @@ def axial_modes(ds: DiaphragmStatics, sol: StaticSolution, fluid: Fluid = WATER_
     reg = _liquid_region(ds, sol, h_mesh, gap_tol)
     k_det, k_end = reg.k_det, reg.k_end
     hp = HarmonicPotential(reg.mesh, 0)
-    G = np.zeros((len(hp.free), n))
-    G[:, 2 * k_det:2 * (k_end + 1)] = hp.surface_load_matrix(reg.normals, 2, normal_dofs=(0, 1))
+    G = _scatter_cols(hp.surface_load_matrix(reg.normals, 2, normal_dofs=(0, 1)), reg.surf_idx, 2, n)
     X = hp.solve(G)
     Ma = rho * 2 * np.pi * (G.T @ X)
     Ma = 0.5 * (Ma + Ma.T)
-    sl = slice(2 * k_det, 2 * (k_end + 1))
-    GamL = np.zeros(n)
-    GamL[sl] = rho * 2 * np.pi * surface_moment(reg.surf, reg.normals, 2, (0, 1), power_r=1, power_z=1)
-    flux = np.zeros(n)
-    flux[sl] = surface_moment(reg.surf, reg.normals, 2, (0, 1), power_r=1, power_z=0)
+    GamL = _scatter_cols(rho * 2 * np.pi * surface_moment(reg.surf, reg.normals, 2, (0, 1),
+                                                          power_r=1, power_z=1), reg.surf_idx, 2, n)
+    flux = _scatter_cols(surface_moment(reg.surf, reg.normals, 2, (0, 1), power_r=1, power_z=0),
+                         reg.surf_idx, 2, n)
 
     M = Ma + Ms
     Gam = GamL + Gs
     rows = [np.eye(n)[0], np.eye(n)[1], np.eye(n)[2 * N], flux]
     rows += _wall_rows(ds, sol, reg.contact - {N}, 2, 0, 1)
+    rows += _pair_rows(sol, reg.pairs, 2, 0, 1)
     if N in reg.contact:
         rows.append(np.eye(n)[2 * N + 1])
     Z = null_space(np.array(rows))
@@ -363,13 +411,17 @@ def lateral_emm_table(ds: DiaphragmStatics, fills: Sequence[float], n_keep: int 
 
 
 def emm_table(ds: DiaphragmStatics, fills: Sequence[float], n_keep_lat: int = 3,
-              n_keep_ax: int = 2, zeta: float = 0.02, h_mesh: float = 0.005):
-    """Lateral + axial Level A parameter table over fill. The number of axial modes
-    kept is the same at every fill (EMMTable interpolation needs equal counts)."""
-    sols = ds.sweep(fills)
+              n_keep_ax: int = 2, zeta: float = 0.02, h_mesh: float = 0.005,
+              sweep_kwargs: Optional[dict] = None):
+    """Lateral + axial Level A parameter table over fill. The numbers of lateral and
+    axial modes kept are the same at every fill (EMMTable interpolation needs equal
+    counts). sweep_kwargs go to DiaphragmStatics.sweep (e.g. max_step=0.01 for
+    rolling diaphragms)."""
+    sols = ds.sweep(fills, **(sweep_kwargs or {}))
     lat = [lateral_modes(ds, s, h_mesh=h_mesh) for s in sols]
     ax = [axial_modes(ds, s, h_mesh=h_mesh) for s in sols]
     n_ax = min(min(len(a.dominant(n_keep_ax)) for a in ax), n_keep_ax)
-    table = EMMTable(entries=[combined_emm(lm, am, n_keep_lat, n_ax, zeta) for lm, am in zip(lat, ax)],
+    n_lat = min(min(len(lm.dominant(n_keep_lat)) for lm in lat), n_keep_lat)
+    table = EMMTable(entries=[combined_emm(lm, am, n_lat, n_ax, zeta) for lm, am in zip(lat, ax)],
                      notes="Level B lateral + axial slosh modes, baseline diaphragm tank")
     return table, lat, ax, sols

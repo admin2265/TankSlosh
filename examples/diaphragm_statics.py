@@ -32,7 +32,7 @@ def main():
     fills = np.round(np.arange(0.05, 0.951, 0.05), 3)
     ds = DiaphragmStatics(BASELINE_DIAPHRAGM, n_segments=100)
     t0 = time.perf_counter()
-    sols = ds.sweep(fills)
+    sols = ds.sweep(fills, max_step=0.01, min_step=0.001)
     print(f"solved {len(sols)} fill levels in {time.perf_counter() - t0:.0f} s")
 
     rows = []
@@ -88,7 +88,7 @@ def main():
     ax.set_xlabel("fill fraction")
     ax.set_ylabel("principal stretch")
     ax.legend()
-    fig.suptitle("Baseline diaphragm statics: 3 mm Shore 70A molded cup (μ = 1.8 MPa, assumed)")
+    fig.suptitle("Baseline diaphragm statics: ribbed 2 mm top hat, stress-free at 95 % (μ = 1.8 MPa, assumed)")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "diaphragm_statics.png"), dpi=120)
     print(f"wrote {os.path.relpath(OUT)}/diaphragm_statics.png, .csv, diaphragm_shapes.npz")

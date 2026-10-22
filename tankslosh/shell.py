@@ -40,11 +40,16 @@ class ShellState:
 class AxisymmetricShell:
     def __init__(self, r0, z0, shear_modulus: float, thickness: float, nu: float = 0.5,
                  material: str = "neo-hookean", youngs_modulus: float = None,
-                 bending: bool = True):
+                 bending: bool = True, ribs=None):
         """material: "neo-hookean" (incompressible, uses shear_modulus) or "linear"
         (small-strain linear-elastic membrane, energy E t/(2(1-nu^2)) (e1^2 + e2^2 +
         2 nu e1 e2) per molded area with e = stretch - 1; uses youngs_modulus and nu).
-        bending=False drops the bending energy (pure membrane)."""
+        bending=False drops the bending energy (pure membrane).
+        ribs: optional radial (meridional) ribs with attributes count, height, width,
+        smeared over the circumference: they add meridional membrane stiffness (rib
+        fibres stretched along the meridian), meridional bending stiffness (web + rib
+        T-section) and mass; hoop stiffness is the web's, rising to the rib section's
+        where the ribs merge near the axis."""
         r0 = np.asarray(r0, dtype=float)
         z0 = np.asarray(z0, dtype=float)
         if r0.shape != z0.shape or r0.ndim != 1 or len(r0) < 3:
@@ -90,6 +95,47 @@ class AxisymmetricShell:
         self.A0_node = A0n
         self.k1_ref, self.k2_ref = self._curvatures(r0, z0)[:2]
         self.area0 = self.A0_seg.sum()
+        self._setup_ribs(ribs)
+
+    def _setup_ribs(self, ribs):
+        """Per-node bending stiffness (meridional Ds, hoop/coupling Dt), per-node
+        areal thickness for mass, and per-segment rib-fibre membrane coefficients."""
+        N, t = self.N, self.t
+        self.ribs = ribs
+        self.Ds = np.full(N + 1, self.D)
+        self.Dt = np.full(N + 1, self.D)
+        self.t_area_node = np.full(N + 1, t)
+        self.c_fib = np.zeros(N)
+        if ribs is None:
+            return
+
+        def coverage(r):
+            with np.errstate(divide="ignore"):
+                return np.minimum(1.0, ribs.count * ribs.width / (2 * np.pi * np.maximum(r, 1e-12)))
+
+        def inertia(phi):
+            # web (thickness t) + ribs (height h, area fraction phi) per unit width,
+            # second moment about the composite neutral axis
+            h = ribs.height
+            A = t + phi * h
+            yb = phi * h * (0.5 * t + 0.5 * h) / A
+            return t ** 3 / 12 + t * yb ** 2 + phi * (h ** 3 / 12 + h * (0.5 * t + 0.5 * h - yb) ** 2)
+
+        phi_n = coverage(self.r0)
+        phi_s = coverage(self.rm0)
+        self.rib_coverage_node = phi_n
+        if self.D > 0:
+            self.Ds = self.D * 12 * inertia(phi_n) / t ** 3
+            self.Dt = self.D * (1 - phi_n) + self.Ds * phi_n
+        self.t_area_node = t + phi_n * ribs.height
+        if self.material == "linear":
+            self.c_fib = 0.5 * self.E * phi_s * ribs.height * self.A0_seg
+        else:
+            self.c_fib = 0.5 * self.mu * phi_s * ribs.height * self.A0_seg
+
+    def node_mass(self, density: float):
+        """Lumped ring mass of the diaphragm (web + ribs) at each node, kg."""
+        return density * self.t_area_node * self.A0_node
 
     # ---------- kinematics ----------
     def _curvatures(self, r, z):
@@ -122,26 +168,33 @@ class AxisymmetricShell:
         if self.material == "linear":
             c = self.E * self.t / (1 - self.nu ** 2)
             e1, e2 = l1 - 1, l2 - 1
-            return c * (e1 + self.nu * e2) / l2, c * (e2 + self.nu * e1) / l1
+            T1 = c * (e1 + self.nu * e2) / l2 + 2 * self.c_fib / self.A0_seg * e1 / l2
+            return T1, c * (e2 + self.nu * e1) / l1
         T1 = self.mu * self.t * (l1 / l2 - 1.0 / (l1 ** 3 * l2 ** 3))
         T2 = self.mu * self.t * (l2 / l1 - 1.0 / (l1 ** 3 * l2 ** 3))
+        if self.ribs is not None:   # rib fibres, per current hoop length
+            T1 = T1 + 2 * self.c_fib / self.A0_seg * (l1 - 1.0 / l1 ** 2) / l2
         return T1, T2
 
     def set_gravity(self, g: float, rho_liquid: float, rho_shell: float):
         """Include gravity along -z: hydrostatic liquid below the diaphragm (potential
         rho_liquid g int z dV of the liquid) and the diaphragm's own weight."""
-        self.gravity = (g, rho_liquid, rho_shell * self.t * self.A0_node)
+        self.gravity = (g, rho_liquid, self.node_mass(rho_shell))
 
     def _membrane(self, l1, l2):
         """Per-segment membrane energy and its derivatives w.r.t. the stretches."""
+        cf = self.c_fib
         if self.material == "linear":
             e1, e2 = l1 - 1, l2 - 1
             c = self.c_lin
-            W = c * (e1 * e1 + e2 * e2 + 2 * self.nu * e1 * e2)
-            return W, 2 * c * (e1 + self.nu * e2), 2 * c * (e2 + self.nu * e1)
+            W = c * (e1 * e1 + e2 * e2 + 2 * self.nu * e1 * e2) + cf * e1 * e1
+            return (W, 2 * c * (e1 + self.nu * e2) + 2 * cf * e1,
+                    2 * c * (e2 + self.nu * e1))
         inv = 1.0 / (l1 * l1 * l2 * l2)
         c = self.c_mem
-        return (c * (l1 * l1 + l2 * l2 + inv - 3.0), c * (2 * l1 - 2 * inv / l1),
+        # rib fibres: incompressible uniaxial neo-Hookean, (mu/2)(l^2 + 2/l - 3)
+        return (c * (l1 * l1 + l2 * l2 + inv - 3.0) + cf * (l1 * l1 + 2.0 / l1 - 3.0),
+                c * (2 * l1 - 2 * inv / l1) + cf * (2 * l1 - 2.0 / (l1 * l1)),
                 c * (2 * l2 - 2 * inv / l2))
 
     # ---------- energy and gradient ----------
@@ -157,9 +210,9 @@ class AxisymmetricShell:
 
         a = k1 - self.k1_ref
         b = k2 - self.k2_ref
-        nu, D, A = self.nu, self.D, self.A0_node
-        ub = 0.5 * D * A * (a * a + b * b + 2 * nu * a * b)
-        ub[-1] = 0.5 * D * A[-1] * (2 + 2 * nu) * a[-1] ** 2
+        nu, Ds, Dt, A = self.nu, self.Ds, self.Dt, self.A0_node
+        ub = 0.5 * A * (Ds * a * a + Dt * b * b + 2 * nu * Dt * a * b)
+        ub[-1] = 0.5 * Ds[-1] * A[-1] * (2 + 2 * nu) * a[-1] ** 2
         U = Um + ub.sum()
         if self.gravity is not None:
             g, rho_l, m_nodes = self.gravity
@@ -183,9 +236,9 @@ class AxisymmetricShell:
         gr[1:] += g_rm
 
         # bending: derivatives wrt a (via dtheta) and b (via thbar and r)
-        dU_da = D * A * (a + nu * b)
-        dU_db = D * A * (b + nu * a)
-        dU_da[-1] = D * A[-1] * (2 + 2 * nu) * a[-1]
+        dU_da = A * (Ds * a + nu * Dt * b)
+        dU_db = A * Dt * (b + nu * a)
+        dU_da[-1] = Ds[-1] * A[-1] * (2 + 2 * nu) * a[-1]
         dU_db[-1] = 0.0
         g_th = np.zeros(N)
         c1 = dU_da / self.s0          # dU/d(dtheta_i)

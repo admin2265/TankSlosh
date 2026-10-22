@@ -32,8 +32,9 @@ N_KEEP, N_KEEP_AX, ZETA = 3, 2, 0.02
 def main():
     fills = np.round(np.arange(0.05, 0.951, 0.05), 3)
     t0 = time.perf_counter()
-    ds = DiaphragmStatics(ts.BASELINE_DIAPHRAGM, n_segments=100)
-    table, results, axial, _ = emm_table(ds, fills, n_keep_lat=N_KEEP, n_keep_ax=N_KEEP_AX, zeta=ZETA)
+    ds = DiaphragmStatics(ts.BASELINE_DIAPHRAGM, n_segments=100)   # top hat uses its own 150-segment mesh
+    table, results, axial, _ = emm_table(ds, fills, n_keep_lat=N_KEEP, n_keep_ax=N_KEEP_AX, zeta=ZETA,
+                                         sweep_kwargs=dict(max_step=0.01, min_step=0.001))
     print(f"statics + modes for {len(results)} fills in {time.perf_counter() - t0:.0f} s")
     table.notes += f"; {N_KEEP} lateral + {N_KEEP_AX} axial modes kept, zeta = {ZETA} placeholder (fit to CFD)"
     table.save_json(os.path.join(OUT, "baseline_emm.json"))

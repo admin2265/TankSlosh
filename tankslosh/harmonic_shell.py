@@ -123,7 +123,12 @@ class HarmonicShell:
             W = 0.5 * sh.E * sh.t / (1 - sh.nu ** 2) * (sq + 2 * sh.nu * pr)
         else:
             W = 0.5 * sh.mu * sh.t * (aa + bb + 1.0 / det - 3.0)
-        return W.mean(-1) * sh.A0_seg
+        W = W * sh.A0_seg[:, None]
+        if sh.ribs is not None:     # rib fibres along the material meridian, stretch |a|
+            l1 = np.sqrt(aa)
+            cf = sh.c_fib[:, None]
+            W = W + (cf * (l1 - 1) ** 2 if sh.material == "linear" else cf * (aa + 2.0 / l1 - 3.0))
+        return W.mean(-1)
 
     def bending_local(self, V):
         """V: (N+1, 9) -> (N+1,) energies."""
@@ -132,8 +137,9 @@ class HarmonicShell:
         a = kss - self.kss_ref
         b = ktt - self.ktt_ref
         nu = sh.nu
-        e = 0.5 * sh.D * (a * a + b * b + 2 * nu * a * b + 2 * (1 - nu) * kst * kst)
-        e[-1] = 0.5 * sh.D * (2 + 2 * nu) * a[-1] ** 2
+        Ds, Dt = sh.Ds[:, None], sh.Dt[:, None]
+        e = 0.5 * (Ds * a * a + Dt * b * b + 2 * nu * Dt * a * b + 2 * (1 - nu) * Dt * kst * kst)
+        e[-1] = 0.5 * sh.Ds[-1] * (2 + 2 * nu) * a[-1] ** 2
         return e.mean(-1) * sh.A0_node
 
     def volume_local(self, V):
@@ -248,7 +254,7 @@ class HarmonicShell:
     def rubber_mass(self, density: float):
         """Lumped ring masses per node (kg); harmonic mass matrix, x-momentum and
         y-angular-momentum coupling vectors for the m = 1 pattern."""
-        m = density * self.sh.t * self.sh.A0_node
+        m = self.sh.node_mass(density)
         M = np.repeat(m / 2.0, 3)
         Gam = np.zeros(3 * (self.N + 1))
         Hy = np.zeros(3 * (self.N + 1))

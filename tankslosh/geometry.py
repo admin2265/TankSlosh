@@ -5,6 +5,7 @@ Frame: z along the tank axis, z = 0 at the inside apex of the lower head.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 from scipy.integrate import quad
@@ -124,6 +125,14 @@ class MoldedCupDiaphragm:
         return self.density * self.thickness * (dome_area + side_area)
 
 
+@dataclass(frozen=True)
+class RibSpec:
+    """Radial (meridional) ribs on one face of the diaphragm."""
+    count: int          # number of ribs around the circumference
+    height: float       # m, standing above the web
+    width: float        # m
+
+
 @dataclass
 class MeridianDiaphragm:
     """Diaphragm given by its molded (stress-free) mid-surface meridian, as points
@@ -139,10 +148,23 @@ class MeridianDiaphragm:
     poisson: float = 0.5
     material: str = "neo-hookean"
     bending: bool = True
+    ribs: Optional[RibSpec] = None
 
     @property
     def clamp_z(self) -> float:
         return float(self.z0[0])
+
+    @property
+    def mass(self) -> float:
+        """Web + ribs, kg (ribs counted until they merge near the axis)."""
+        r, z = np.asarray(self.r0, float), np.asarray(self.z0, float)
+        L = np.hypot(np.diff(r), np.diff(z))
+        rm = 0.5 * (r[:-1] + r[1:])
+        t_eff = np.full_like(rm, self.thickness)
+        if self.ribs is not None:
+            phi = np.minimum(1.0, self.ribs.count * self.ribs.width / (2 * np.pi * np.maximum(rm, 1e-12)))
+            t_eff = t_eff + phi * self.ribs.height
+        return float(self.density * np.sum(2 * np.pi * rm * L * t_eff))
 
 
 def hemisphere_diaphragm(tank: EllipticalHeadTank, n_segments: int = 100, **kw) -> MeridianDiaphragm:
@@ -158,8 +180,54 @@ def hemisphere_diaphragm(tank: EllipticalHeadTank, n_segments: int = 100, **kw) 
     return MeridianDiaphragm(tank=tank, r0=r0, z0=z0, stress_free_fill=1.0, **kw)
 
 
+def top_hat_meridian(tank: EllipticalHeadTank, brim_z: float, gap: float, lip: float = 0.01,
+                     n_segments: int = 150):
+    """Top-hat meridian: clamped on the wall at brim_z, a short flare (lip) in to a
+    straight sidewall at r = R - gap up to the head seam, then a dome following the
+    upper head offset inward by gap, to the axis. Points uniform in arc length."""
+    R, b, zt = tank.radius, tank.head_depth, tank.straight_top
+    th = np.linspace(0, np.pi / 2, 600)[1:]
+    dome = np.column_stack([(R - gap) * np.cos(th), zt + (b - gap) * np.sin(th)])
+    P = np.vstack([[(R, brim_z), (R - gap, brim_z + lip), (R - gap, zt)], dome])
+    s = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(P, axis=0), axis=1))])
+    si = np.linspace(0, s[-1], n_segments + 1)
+    r0, z0 = np.interp(si, s, P[:, 0]), np.interp(si, s, P[:, 1])
+    r0[-1] = 0.0
+    return r0, z0
+
+
+def top_hat_diaphragm(tank: EllipticalHeadTank, stress_free_fill: float = 0.95,
+                      brim_z: float = 0.2, lip: float = 0.01, n_segments: int = 150,
+                      **kw) -> MeridianDiaphragm:
+    """Molded top-hat diaphragm lining the upper part of the tank, liquid inside.
+    The gap to the wall is chosen so the gas between hat and wall is
+    (1 - stress_free_fill) of the tank volume when the hat is undeformed."""
+    from scipy.optimize import brentq
+    from .shell import AxisymmetricShell
+
+    gas_target = (1 - stress_free_fill) * tank.volume
+    above = tank.volume - tank.volume_below(brim_z)
+
+    def excess(gap):
+        r0, z0 = top_hat_meridian(tank, brim_z, gap, lip, n_segments)
+        return above + AxisymmetricShell.enclosed_volume(r0, z0) - gas_target
+
+    gap = brentq(excess, 1e-5, 0.5 * tank.head_depth, xtol=1e-12)
+    r0, z0 = top_hat_meridian(tank, brim_z, gap, lip, n_segments)
+    d = MeridianDiaphragm(tank=tank, r0=r0, z0=z0, stress_free_fill=stress_free_fill, **kw)
+    d.gap = gap
+    return d
+
+
 BASELINE_TANK = EllipticalHeadTank(radius=0.2, height=0.6, head_ratio=2.0)
-BASELINE_DIAPHRAGM = MoldedCupDiaphragm(tank=BASELINE_TANK, clamp_z=0.5, stress_free_fill=0.5,
-                                        thickness=3e-3, shear_modulus=1.8e6, density=1150.0)
+# previous baseline (Level B verification cases): 3 mm plain cup, stress-free at 50 %
+CUP_3MM_DIAPHRAGM = MoldedCupDiaphragm(tank=BASELINE_TANK, clamp_z=0.5, stress_free_fill=0.5,
+                                       thickness=3e-3, shear_modulus=1.8e6, density=1150.0)
+# current baseline: ribbed top hat (2 mm web, ~36 radial ribs on the gas side, estimated
+# from a photo), brim at z = 0.2 m, stress-free at 95 % fill; EPDM-class rubber (assumed)
+BASELINE_RIBS = RibSpec(count=36, height=2e-3, width=3e-3)
+BASELINE_DIAPHRAGM = top_hat_diaphragm(BASELINE_TANK, stress_free_fill=0.95, brim_z=0.2,
+                                       thickness=2e-3, density=1150.0, shear_modulus=1.8e6,
+                                       ribs=BASELINE_RIBS)
 BASELINE_FILL_RANGE = (0.05, 0.95)
 BASELINE_MOUNT_POINT = (BASELINE_TANK.radius, 0.0, BASELINE_TANK.height / 2)
