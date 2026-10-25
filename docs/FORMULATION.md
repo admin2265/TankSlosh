@@ -236,7 +236,7 @@ $$
 
 > (8.1)–(8.2) reproduce the force, the moment and the CG motion of (7.5) exactly when all modes are kept. Moreover $\sum_{\text{all }n}m_n=\Gamma^{\mathsf T}\mathsf M^{-1}\Gamma\le m$: by Cauchy–Schwarz in the $\mathsf M$-inner product, the slosh masses can never exceed the contents.
 
-- **Truncation.** Modes with $m_n\ge0.002\,m$ are kept, at most three lateral and two axial, and the rest are lumped into $m_0$. Truncated modes are stiff, high-frequency modes that move quasi-statically with the tank.
+- **Truncation.** Among the stable modes with $m_n\ge0.002\,m$, the twelve lateral and eleven axial with the largest $m_n$ below $f_c=50$ Hz are kept (padded with the lowest modes above $f_c$, so every fill has the same count), and the rest are lumped into $m_0$. At every fill of the baseline this leaves less than about 2 % of the contents in modes below $f_c$. The truncated modes lie above $f_c$ and move quasi-statically with the tank for excitation well below $f_c$.
 
 - **Stability.** If $\min\operatorname{spec}(\mathsf Z^{\mathsf T}\mathsf K\mathsf Z)<0$, the axisymmetric static state is a saddle for $m=1$: the real diaphragm would buckle sideways. Such modes are reported and excluded.
 
@@ -284,7 +284,7 @@ The multiplier becomes the pressure difference at $z=0$, so $p_L(z)-p_g=\Delta p
 | Smeared ribs | Wavelength ≫ 35 mm rib spacing | Violated in the tight fold, so fold stiffness is uncertain; rib size is estimated |
 | Frictionless contact; contact persists in the linear problem | Lubricated by liquid; small amplitude | Friction would stiffen the fold and add damping |
 | Squeeze-film rule (gaps < 2 mm next to the wall, and touching fold layers, are not liquid) | Thin gaps block normal motion | Affects which nodes are wetted near folds |
-| Modal truncation | Truncated modes are stiff | Masses beyond 3 lateral + 2 axial are lumped into $m_0$ |
+| Modal truncation | Truncated modes are stiff | Modes outside the 12 lateral + 11 axial kept below 50 Hz are lumped into $m_0$; valid for excitation well below 50 Hz |
 | Damping $\zeta_n=0.02$ | Placeholder | Sets ring-down and resonance height, not frequencies |
 
 ## 13. Verification

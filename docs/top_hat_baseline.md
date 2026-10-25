@@ -51,6 +51,8 @@ The previous baseline, the 3 mm cup stress-free at 50 % (`CUP_3MM_DIAPHRAGM`), a
 
 Fills flagged unstable: 45, 50, 55, 65 and 75 %. The full table is in `examples/output/slosh_modes.csv`.
 
+**Modes in the parameter tables** (orbit and 1 g): the 12 lateral and 11 axial modes with the largest slosh mass below 50 Hz. They carry 90–98 % of the lateral and 70–95 % of the axial slosh mass of all stable modes at every fill; the slosh mass missed below 50 Hz is at most 0.75 % of the contents (largest single missed mode 0.37 %). Below about 5 Hz the force response is the same as with the earlier 3 lateral + 2 axial tables, except at 55 % fill, where the earlier rule skipped a 9.9 Hz lateral mode (1 g, 19 % of the contents) and an 8–9 Hz axial mode (orbit, 11 %).
+
 ## Slosh modes: 1 g, gas on top (shaker test, `ground_test_modes.csv`)
 | Fill | Main sideways modes (slosh mass) | Main axial mode | Stable |
 |---|---|---|---|
@@ -80,6 +82,7 @@ Fills flagged unstable: 5, 15, 45, 50 and 75 %.
 | Inputs that are estimates | Clamp height, rib size and count, and μ. The ribs and the web thickness control bending, so frequencies scale roughly with √(bending stiffness). |
 | Strongest outputs | The pressure difference (near zero), the overall frequency band (about 0.5–7 Hz) and the large axial participation at high fill. |
 | Weakest outputs | Individual mode frequencies at low fill and at the unstable fills. |
+| Between table fills | `EMMTable.at` interpolates mode by mode in frequency order. Where a mode's frequency jumps between neighbouring 5 % fills, values in between blend different modes. Use the computed fills, or compute the fill of interest directly. |
 
 ## Implications for the shaker test (supersedes the advice given for the 3 mm cup)
 - **Frequency range:** sweep 0.3–30 Hz sideways and axially. The important content is about 1–7 Hz at 1 g.

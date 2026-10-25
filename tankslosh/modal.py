@@ -35,6 +35,13 @@ from .harmonic_shell import HarmonicShell
 from .liquid_fe import (HarmonicPotential, build_mesh, surface_moment, surface_normals,
                         translation_coupling)
 
+# Default mode selection for Level A tables: the heaviest modes below F_MAX_HZ, up
+# to N_KEEP_LAT lateral and N_KEEP_AX axial (padded with the next modes above the
+# cutoff so every fill keeps the same count). Chosen so that the slosh mass missed
+# below 50 Hz is under about 2 % of the contents at every fill of the top-hat
+# baseline (orbit and 1 g).
+N_KEEP_LAT, N_KEEP_AX, F_MAX_HZ = 12, 11, 50.0
+
 
 def _wall_profile(tank: EllipticalHeadTank):
     a, b = tank.radius, tank.head_depth
@@ -63,6 +70,61 @@ def tank_wall_polyline(tank: EllipticalHeadTank, p_start, p_end, h: float) -> np
 
 
 @dataclass
+class MassCapture:
+    """How much of the slosh mass the kept modes carry. contents = liquid + rubber;
+    all_modes = sum over every stable (positive-frequency) mode."""
+    kept: float
+    all_modes: float
+    contents: float
+    n_kept: int
+
+    @property
+    def kept_frac(self) -> float:      # kept modes / contents
+        return self.kept / self.contents
+
+    @property
+    def all_frac(self) -> float:       # all stable modes / contents
+        return self.all_modes / self.contents
+
+    @property
+    def kept_of_all(self) -> float:    # kept modes / all stable modes
+        return self.kept / self.all_modes if self.all_modes > 0 else float("nan")
+
+    def text(self) -> str:
+        return (f"{self.n_kept} kept modes {self.kept_frac:.1%} of contents, all stable modes "
+                f"{self.all_frac:.1%}, kept/all {self.kept_of_all:.1%}")
+
+
+def _mass_capture(freq_hz, slosh_mass, contents, sel) -> MassCapture:
+    stable = np.asarray(freq_hz) > 0
+    return MassCapture(kept=float(np.sum(np.asarray(slosh_mass)[sel])) if len(sel) else 0.0,
+                       all_modes=float(np.sum(np.asarray(slosh_mass)[stable])),
+                       contents=float(contents), n_kept=len(sel))
+
+
+def _select(freq_hz, slosh_mass, contents, n_keep, min_fraction, f_max):
+    """Indices (ascending frequency) of the kept modes. Candidates are stable modes
+    carrying at least min_fraction of the contents. f_max None: the n_keep lowest.
+    Otherwise the n_keep heaviest below f_max, padded with the lowest above it and
+    then, if a fill still has too few, with the heaviest remaining stable modes, so
+    every fill keeps exactly n_keep (EMMTable needs equal counts)."""
+    # modes with negative stiffness (static shape unstable to this pattern) are
+    # not oscillators and are never kept
+    idx = [i for i in range(len(freq_hz))
+           if freq_hz[i] > 0 and slosh_mass[i] >= min_fraction * contents]
+    if f_max is None:
+        return idx[:n_keep]
+    below = [i for i in idx if freq_hz[i] < f_max]
+    above = [i for i in idx if freq_hz[i] >= f_max]
+    keep = sorted(below, key=lambda i: -slosh_mass[i])[:n_keep]
+    keep += above[:n_keep - len(keep)]
+    if len(keep) < n_keep:
+        rest = [i for i in range(len(freq_hz)) if freq_hz[i] > 0 and i not in keep]
+        keep += sorted(rest, key=lambda i: -slosh_mass[i])[:n_keep - len(keep)]
+    return sorted(keep, key=lambda i: freq_hz[i])
+
+
+@dataclass
 class LateralModes:
     fill: float
     freq_hz: np.ndarray        # all modes, ascending
@@ -85,17 +147,20 @@ class LateralModes:
     def stable(self) -> bool:
         return self.min_eigenvalue > 0
 
-    def dominant(self, n_keep: int = 3, min_fraction: float = 0.002):
-        """Indices of the lowest-frequency modes carrying at least min_fraction of the
-        contents mass (at most n_keep)."""
-        # modes with negative stiffness (static shape unstable to this pattern) are
-        # not oscillators and are never kept
-        idx = [i for i in range(len(self.freq_hz))
-               if self.freq_hz[i] > 0 and self.slosh_mass[i] >= min_fraction * self.contents_mass]
-        return idx[:n_keep]
+    def dominant(self, n_keep: int = 3, min_fraction: float = 0.002, f_max: Optional[float] = None):
+        """Indices of the kept modes, ascending frequency (see _select). The default
+        f_max = None gives the lowest-frequency significant modes; dominant(1)[0] is
+        the first significant mode."""
+        return _select(self.freq_hz, self.slosh_mass, self.contents_mass, n_keep, min_fraction, f_max)
 
-    def emm(self, n_keep: int = 3, zeta: float = 0.02, min_fraction: float = 0.002) -> EMMParams:
-        sel = self.dominant(n_keep, min_fraction)
+    def capture(self, n_keep: int = N_KEEP_LAT, min_fraction: float = 0.002,
+                f_max: Optional[float] = F_MAX_HZ) -> MassCapture:
+        return _mass_capture(self.freq_hz, self.slosh_mass, self.contents_mass,
+                             self.dominant(n_keep, min_fraction, f_max))
+
+    def emm(self, n_keep: int = N_KEEP_LAT, zeta: float = 0.02, min_fraction: float = 0.002,
+            f_max: Optional[float] = F_MAX_HZ) -> EMMParams:
+        sel = self.dominant(n_keep, min_fraction, f_max)
         modes = [SloshMode(mass=float(self.slosh_mass[i]), freq_hz=float(self.freq_hz[i]),
                            zeta=zeta, height=float(self.height[i])) for i in sel]
         m = self.contents_mass
@@ -105,6 +170,7 @@ class LateralModes:
                          axial_modes=[], fill_fraction=self.fill,
                          notes=(f"Level B lateral modes, contents = liquid {self.liquid_mass:.3f} kg"
                                 f" + diaphragm {self.rubber_mass:.3f} kg; zeta = {zeta} placeholder"
+                                f"; lateral capture: {self.capture(n_keep, min_fraction, f_max).text()}"
                                 + ("" if self.stable else "; WARNING: axisymmetric shape unstable "
                                    "to m = 1 (would buckle sideways); unstable mode left out")))
 
@@ -304,16 +370,18 @@ class AxialModes:
     def stable(self) -> bool:
         return self.min_eigenvalue > 0
 
-    def dominant(self, n_keep: int = 2, min_fraction: float = 0.002):
-        # modes with negative stiffness (static shape unstable to this pattern) are
-        # not oscillators and are never kept
-        idx = [i for i in range(len(self.freq_hz))
-               if self.freq_hz[i] > 0 and self.slosh_mass[i] >= min_fraction * self.contents_mass]
-        return idx[:n_keep]
+    def dominant(self, n_keep: int = 2, min_fraction: float = 0.002, f_max: Optional[float] = None):
+        return _select(self.freq_hz, self.slosh_mass, self.contents_mass, n_keep, min_fraction, f_max)
 
-    def modes(self, n_keep: int = 2, zeta: float = 0.02, min_fraction: float = 0.002):
+    def capture(self, n_keep: int = N_KEEP_AX, min_fraction: float = 0.002,
+                f_max: Optional[float] = F_MAX_HZ) -> MassCapture:
+        return _mass_capture(self.freq_hz, self.slosh_mass, self.contents_mass,
+                             self.dominant(n_keep, min_fraction, f_max))
+
+    def modes(self, n_keep: int = N_KEEP_AX, zeta: float = 0.02, min_fraction: float = 0.002,
+              f_max: Optional[float] = F_MAX_HZ):
         return [SloshMode(mass=float(self.slosh_mass[i]), freq_hz=float(self.freq_hz[i]),
-                          zeta=zeta, height=0.0) for i in self.dominant(n_keep, min_fraction)]
+                          zeta=zeta, height=0.0) for i in self.dominant(n_keep, min_fraction, f_max)]
 
 
 def axisymmetric_hessians(shell, r, z, h: float = 1e-7):
@@ -391,14 +459,46 @@ def axial_modes(ds: DiaphragmStatics, sol: StaticSolution, fluid: Fluid = WATER_
                       slosh_mass=Gn ** 2, contents_mass=m_c, min_eigenvalue=float(w2[0]))
 
 
-def combined_emm(lat: LateralModes, ax: Optional[AxialModes], n_keep_lat: int = 3,
-                 n_keep_ax: int = 2, zeta: float = 0.02) -> EMMParams:
-    p = lat.emm(n_keep_lat, zeta)
+def combined_emm(lat: LateralModes, ax: Optional[AxialModes], n_keep_lat: int = N_KEEP_LAT,
+                 n_keep_ax: int = N_KEEP_AX, zeta: float = 0.02,
+                 f_max: Optional[float] = F_MAX_HZ) -> EMMParams:
+    p = lat.emm(n_keep_lat, zeta, f_max=f_max)
     if ax is not None:
-        p.axial_modes = ax.modes(n_keep_ax, zeta)
-        p.notes += f"; axial modes: {len(p.axial_modes)}"
+        p.axial_modes = ax.modes(n_keep_ax, zeta, f_max=f_max)
+        p.notes += (f"; axial modes: {len(p.axial_modes)}"
+                    f"; axial capture: {ax.capture(n_keep_ax, f_max=f_max).text()}")
         p.validate()
     return p
+
+
+def capture_columns(lat: LateralModes, ax: Optional[AxialModes], n_keep_lat: int = N_KEEP_LAT,
+                    n_keep_ax: int = N_KEEP_AX, f_max: Optional[float] = F_MAX_HZ) -> dict:
+    """Captured-mass fractions as report/CSV columns: kept and all-stable-mode slosh
+    mass as fractions of the contents, and kept / all."""
+    out = {}
+    for tag, modes, n in (("lat", lat, n_keep_lat), ("ax", ax, n_keep_ax)):
+        if modes is None:
+            continue
+        c = modes.capture(n, f_max=f_max)
+        out.update({f"{tag}_kept_frac": c.kept_frac, f"{tag}_all_frac": c.all_frac,
+                    f"{tag}_kept_of_all": c.kept_of_all})
+    return out
+
+
+def capture_report(rows, n_keep_lat: int, n_keep_ax: int, f_max: Optional[float] = F_MAX_HZ) -> str:
+    """Text table of captured slosh mass per fill from rows holding 'fill' and the
+    capture_columns keys."""
+    band = f" (heaviest below {f_max:g} Hz)" if f_max is not None else " (lowest frequency)"
+    lines = [f"captured slosh mass, % of contents: kept {n_keep_lat} lateral / all stable lateral"
+             f" modes, kept {n_keep_ax} axial / all stable axial modes{band}"]
+    for r in rows:
+        line = (f" {r['fill']:4.0%}  lateral {100 * r['lat_kept_frac']:5.1f} / {100 * r['lat_all_frac']:5.1f}"
+                f" (kept/all {100 * r['lat_kept_of_all']:5.1f})")
+        if "ax_kept_frac" in r:
+            line += (f"   axial {100 * r['ax_kept_frac']:5.1f} / {100 * r['ax_all_frac']:5.1f}"
+                     f" (kept/all {100 * r['ax_kept_of_all']:5.1f})")
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def lateral_emm_table(ds: DiaphragmStatics, fills: Sequence[float], n_keep: int = 3,
@@ -410,18 +510,19 @@ def lateral_emm_table(ds: DiaphragmStatics, fills: Sequence[float], n_keep: int 
     return table, results, sols
 
 
-def emm_table(ds: DiaphragmStatics, fills: Sequence[float], n_keep_lat: int = 3,
-              n_keep_ax: int = 2, zeta: float = 0.02, h_mesh: float = 0.005,
-              sweep_kwargs: Optional[dict] = None):
+def emm_table(ds: DiaphragmStatics, fills: Sequence[float], n_keep_lat: int = N_KEEP_LAT,
+              n_keep_ax: int = N_KEEP_AX, zeta: float = 0.02, h_mesh: float = 0.005,
+              sweep_kwargs: Optional[dict] = None, f_max: Optional[float] = F_MAX_HZ):
     """Lateral + axial Level A parameter table over fill. The numbers of lateral and
     axial modes kept are the same at every fill (EMMTable interpolation needs equal
-    counts). sweep_kwargs go to DiaphragmStatics.sweep (e.g. max_step=0.01 for
+    counts). Modes are chosen by _select (heaviest below f_max; f_max None: lowest
+    frequency). sweep_kwargs go to DiaphragmStatics.sweep (e.g. max_step=0.01 for
     rolling diaphragms)."""
     sols = ds.sweep(fills, **(sweep_kwargs or {}))
     lat = [lateral_modes(ds, s, h_mesh=h_mesh) for s in sols]
     ax = [axial_modes(ds, s, h_mesh=h_mesh) for s in sols]
-    n_ax = min(min(len(a.dominant(n_keep_ax)) for a in ax), n_keep_ax)
-    n_lat = min(min(len(lm.dominant(n_keep_lat)) for lm in lat), n_keep_lat)
-    table = EMMTable(entries=[combined_emm(lm, am, n_lat, n_ax, zeta) for lm, am in zip(lat, ax)],
+    n_ax = min(min(len(a.dominant(n_keep_ax, f_max=f_max)) for a in ax), n_keep_ax)
+    n_lat = min(min(len(lm.dominant(n_keep_lat, f_max=f_max)) for lm in lat), n_keep_lat)
+    table = EMMTable(entries=[combined_emm(lm, am, n_lat, n_ax, zeta, f_max) for lm, am in zip(lat, ax)],
                      notes="Level B lateral + axial slosh modes, baseline diaphragm tank")
     return table, lat, ax, sols

@@ -16,7 +16,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import tankslosh as ts  # noqa: E402
 from tankslosh.diaphragm_static import DiaphragmStatics  # noqa: E402
-from tankslosh.modal import emm_table  # noqa: E402
+from tankslosh.modal import F_MAX_HZ, N_KEEP_AX, N_KEEP_LAT, capture_columns, capture_report, emm_table  # noqa: E402
 
 OUT = os.path.join(os.path.dirname(__file__), "output")
 os.makedirs(OUT, exist_ok=True)
@@ -27,23 +27,30 @@ def main():
     fills = np.round(np.arange(0.05, 0.951, 0.05), 3)
     t0 = time.perf_counter()
     ds = DiaphragmStatics(ts.BASELINE_DIAPHRAGM, gravity=(G, ts.WATER_20C.density))
-    table, lat, ax, _ = emm_table(ds, fills, n_keep_lat=3, n_keep_ax=2, zeta=0.02,
+    table, lat, ax, _ = emm_table(ds, fills, n_keep_lat=N_KEEP_LAT, n_keep_ax=N_KEEP_AX, zeta=0.02, f_max=F_MAX_HZ,
                                   sweep_kwargs=dict(max_step=0.01, min_step=0.001))
     print(f"1-g statics + modes for {len(lat)} fills in {time.perf_counter() - t0:.0f} s")
     table.notes += "; 1 g, gas on top (ground test). Level A runs need specific force z = +9.81"
     table.save_json(os.path.join(OUT, "ground_test_emm.json"))
+    n_lat, n_ax = len(table.entries[0].lateral_modes), len(table.entries[0].axial_modes)
     rows = []
     for lm, am in zip(lat, ax):
         row = dict(fill=lm.fill, stable=bool(lm.stable and am.stable))
-        for j, i in enumerate(lm.dominant(3), 1):
+        sel, sel_ax = lm.dominant(n_lat, f_max=F_MAX_HZ), am.dominant(n_ax, f_max=F_MAX_HZ)
+        for j, i in enumerate(sel, 1):
             row[f"lat{j}_hz"], row[f"lat{j}_frac"] = lm.freq_hz[i], lm.slosh_mass[i] / lm.contents_mass
-        for j, i in enumerate(am.dominant(2), 1):
+        for j, i in enumerate(sel_ax, 1):
             row[f"ax{j}_hz"], row[f"ax{j}_frac"] = am.freq_hz[i], am.slosh_mass[i] / am.contents_mass
+        row.update(capture_columns(lm, am, n_lat, n_ax, F_MAX_HZ))
         rows.append(row)
         print(f" {lm.fill:4.0%} stable={row['stable']!s:5s} lateral " + ", ".join(
-            f"{lm.freq_hz[i]:.2f} Hz ({100 * lm.slosh_mass[i] / lm.contents_mass:.1f}%)" for i in lm.dominant(3))
+            f"{lm.freq_hz[i]:.2f} Hz ({100 * lm.slosh_mass[i] / lm.contents_mass:.1f}%)" for i in sel
+            if lm.slosh_mass[i] >= 0.02 * lm.contents_mass)
             + " | axial " + ", ".join(
-            f"{am.freq_hz[i]:.2f} Hz ({100 * am.slosh_mass[i] / am.contents_mass:.1f}%)" for i in am.dominant(2)))
+            f"{am.freq_hz[i]:.2f} Hz ({100 * am.slosh_mass[i] / am.contents_mass:.1f}%)" for i in sel_ax
+            if am.slosh_mass[i] >= 0.02 * am.contents_mass))
+    print("(console lists kept modes >= 2 % of contents; the CSV has all of them)")
+    print(capture_report(rows, n_lat, n_ax, F_MAX_HZ))
     keys = []
     for r in rows:
         keys += [k for k in r if k not in keys]
