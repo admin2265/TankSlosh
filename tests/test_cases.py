@@ -55,6 +55,7 @@ class TestLoadCase(unittest.TestCase):
         self.assertEqual(c.tank, ts.BASELINE_TANK)
         self.assertEqual(c.mount_point, ts.BASELINE_MOUNT_POINT)
         np.testing.assert_array_equal(c.fills, np.round(np.arange(0.05, 0.951, 0.05), 3))
+        self.assertEqual((c.n_keep_lateral, c.n_keep_axial, c.f_max_hz), (12, 11, 50.0))
         c = load_case(os.path.join(ROOT, "cases", "cup-50pct-3mm"))
         self.assertEqual(c.diaphragm, ts.CUP_3MM_DIAPHRAGM)
         self.assertEqual(c.n_segments, 100)
@@ -102,6 +103,8 @@ class TestRunTinyCase(unittest.TestCase):
                 md = fh.read()
             self.assertIn("Inputs that are estimates", md)
             self.assertIn("1 g, gas on top", md)
+            self.assertIn("heaviest below 50 Hz", md)
+            self.assertIn("lat_kept_frac", rows[0])
             # report rebuilt from the CSVs keeps the run line and the same tables
             rebuild_report(tmp)
             with open(os.path.join(out, "results.md"), encoding="utf-8") as fh:

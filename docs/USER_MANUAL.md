@@ -164,6 +164,8 @@ for m in q.lateral_modes + q.axial_modes:
 - `p.lateral_modes` and `p.axial_modes` are lists of `SloshMode(mass, freq_hz, zeta, height)`.
 - `p.fixed_mass` and `p.fixed_height` describe the rigid part.
 - `p.liquid_mass` is the total contents mass.
+- **Which modes are kept:** each fill keeps the 12 lateral and 11 axial modes with the largest slosh mass below 50 Hz (`N_KEEP_LAT`, `N_KEEP_AX`, `F_MAX_HZ` in `tankslosh/modal.py`; pass `n_keep_lat`, `n_keep_ax`, `f_max` to `emm_table` to change them, `f_max=None` for the lowest-frequency modes). Fills with fewer significant modes are padded so every fill has the same count. The rest of the contents is in the fixed mass, which is correct for excitation well below 50 Hz.
+- **Captured mass:** `p.notes` states what share of the contents the kept modes carry and what all stable modes carry; the example scripts print the same per fill (`capture_report`) and write it to their CSV files.
 - Tables save and load as JSON with `save_json` / `load_json`.
 
 ---
@@ -364,7 +366,8 @@ Lengths in m, pressures in Pa, densities in kg/m³. Keys with a default may be l
 | `sweep_max_step`, `sweep_min_step` | Continuation steps in fill for the statics; rolling diaphragms need 0.01 / 0.001 | 0.025, 0.002 |
 | `self_contact` | Keep folded layers one thickness apart | true |
 | `liquid_mesh` | Potential-flow triangle size | 0.005 |
-| `n_keep_lateral`, `n_keep_axial` | Modes kept per fill in the parameter table | 3, 2 |
+| `n_keep_lateral`, `n_keep_axial` | Modes kept per fill in the parameter table: the heaviest below `f_max_hz` | 12, 11 |
+| `f_max_hz` | Mode-selection cutoff [Hz]; 0 keeps the lowest-frequency modes instead | 50 |
 | `pulse_fills` | Fills shown in `orbit_pulse_response.png` | 25, 55, 75 % |
 | **`[damping]`** `zeta` | Damping ratio for every mode (a placeholder until fitted) | 0.02 |
 
@@ -392,6 +395,8 @@ Lengths in m, pressures in Pa, densities in kg/m³. Keys with a default may be l
   - Axisymmetric diaphragm shapes, so real non-axisymmetric wrinkling is not captured. This matters most in the 55–65 % "soft band" and the folded high-fill states.
   - Frictionless wall contact.
   - Incompressible liquid. Gas pressure does not affect slosh.
+  - Modes above 50 Hz are not represented as oscillators (see 5.4).
+  - **Between table fills:** `EMMTable.at` interpolates mode by mode in frequency order. Where a mode's frequency jumps between neighbouring table fills (for example at the unstable fills, or where two close modes swap), values at fills in between blend different modes and can be off near that frequency. Results at the computed fills are exact; for an in-between fill that matters, compute it directly or add it to the fill list.
 - **Ribbed top-hat baseline:**
   - The diaphragm is slack and rolls, so modes are about 0.5–7 Hz.
   - Several fills are flagged unstable to sideways buckling, and the model cannot follow that buckling.

@@ -55,8 +55,9 @@ sweep_max_step = 0.01       # continuation step in fill; rolling diaphragms need
 sweep_min_step = 0.001
 liquid_mesh = 0.005         # m, potential-flow triangle size
 self_contact = true         # keep folded layers one wall thickness apart
-n_keep_lateral = 3
-n_keep_axial = 2
+n_keep_lateral = 12        # modes kept per fill: the heaviest below f_max_hz
+n_keep_axial = 11
+f_max_hz = 50.0            # selection cutoff; 0 = keep the lowest-frequency modes instead
 pulse_fills = [0.25, 0.55, 0.75]
 
 [damping]

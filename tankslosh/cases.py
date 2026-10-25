@@ -17,6 +17,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 from .fluid import WATER_20C, Fluid
+from .modal import F_MAX_HZ, N_KEEP_AX, N_KEEP_LAT
 from .geometry import (EllipticalHeadTank, MeridianDiaphragm, MoldedCupDiaphragm, RibSpec,
                        hemisphere_diaphragm, top_hat_diaphragm)
 
@@ -44,6 +45,7 @@ class Case:
     self_contact: bool
     n_keep_lateral: int
     n_keep_axial: int
+    f_max_hz: Optional[float]
     zeta: float
     orbit: bool
     ground_test: bool
@@ -165,7 +167,9 @@ def load_case(folder: str) -> Case:
         sweep_min_step=float(a.get("sweep_min_step", 0.002)),
         liquid_mesh=float(a.get("liquid_mesh", 0.005)),
         self_contact=bool(a.get("self_contact", True)),
-        n_keep_lateral=int(a.get("n_keep_lateral", 3)), n_keep_axial=int(a.get("n_keep_axial", 2)),
+        n_keep_lateral=int(a.get("n_keep_lateral", N_KEEP_LAT)),
+        n_keep_axial=int(a.get("n_keep_axial", N_KEEP_AX)),
+        f_max_hz=float(a.get("f_max_hz", F_MAX_HZ)) or None,
         zeta=float(damp.get("zeta", 0.02)),
         orbit=bool(env.get("orbit", True)), ground_test=bool(env.get("ground_test", False)),
         g=float(env.get("g", G_EARTH)), mount_point=mount,

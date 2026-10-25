@@ -10,7 +10,7 @@ from tankslosh.diaphragm_static import DiaphragmStatics
 from tankslosh.harmonic_shell import HarmonicShell
 from tankslosh.liquid_fe import (HarmonicPotential, build_mesh, surface_moment, surface_normals,
                                  translation_coupling)
-from tankslosh.modal import axial_modes, axisymmetric_hessians, combined_emm, lateral_modes
+from tankslosh.modal import AxialModes, axial_modes, axisymmetric_hessians, capture_columns, combined_emm, lateral_modes
 from tankslosh.shell import AxisymmetricShell
 
 MU = 1.8e6
@@ -118,6 +118,21 @@ class TestLiquidFE(unittest.TestCase):
         self.assertLess(np.sum(Gn ** 2), m)
 
 
+class TestModeSelection(unittest.TestCase):
+    def test_cutoff_keeps_heaviest_below_and_pads_above(self):
+        f = np.array([-1.0, 2.0, 5.0, 8.0, 30.0, 60.0, 90.0])
+        m = np.array([50.0, 0.1, 1.0, 20.0, 5.0, 3.0, 4.0])   # contents 100
+        am = AxialModes(fill=0.5, freq_hz=f, slosh_mass=m, contents_mass=100.0, min_eigenvalue=-1.0)
+        self.assertEqual(am.dominant(2), [2, 3])                    # lowest significant
+        self.assertEqual(am.dominant(2, f_max=50), [3, 4])          # heaviest below 50 Hz
+        self.assertEqual(am.dominant(5, f_max=50), [2, 3, 4, 5, 6])  # padded above the cutoff
+        self.assertEqual(am.dominant(3, f_max=50), [2, 3, 4])
+        self.assertEqual(am.dominant(6, f_max=50), [1, 2, 3, 4, 5, 6])  # sub-threshold pad
+        c = am.capture(2, f_max=50)
+        self.assertAlmostEqual(c.kept_frac, 0.25)
+        self.assertAlmostEqual(c.all_frac, 0.331)
+
+
 class TestBaselineModes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -132,6 +147,19 @@ class TestBaselineModes(unittest.TestCase):
             p = lm.emm()
             self.assertAlmostEqual(p.cg_height, lm.contents_cg_z, places=9)
             self.assertGreater(p.fixed_mass, 0)
+
+    def test_mass_capture(self):
+        for f, lm in self.res.items():
+            c = lm.capture(3)
+            p = lm.emm(3)
+            self.assertAlmostEqual(c.kept, sum(md.mass for md in p.lateral_modes), places=9)
+            self.assertAlmostEqual(c.kept_frac, c.kept / lm.contents_mass, places=12)
+            self.assertLessEqual(c.kept, c.all_modes * (1 + 1e-12))
+            self.assertLess(c.all_frac, 1.0)
+            self.assertIn("lateral capture", p.notes)
+            cols = capture_columns(lm, None, 3)
+            self.assertAlmostEqual(cols["lat_kept_of_all"], c.kept_of_all, places=12)
+            self.assertNotIn("ax_kept_frac", cols)
 
     def test_regression(self):
         # 50-segment values; mesh-converged to ~2 % (docs/slosh_modes.md)
@@ -209,7 +237,7 @@ class TestAxial(unittest.TestCase):
             am = axial_modes(ds, s)
             self.assertTrue(am.stable)
             self.assertLess(am.slosh_mass.sum(), am.contents_mass)
-            p = combined_emm(lateral_modes(ds, s), am)
+            p = combined_emm(lateral_modes(ds, s), am, n_keep_ax=2, f_max=None)
             self.assertEqual(len(p.axial_modes), 2)
             self.assertGreater(p.axial_rigid_mass, 0)
             if round(s.fill, 2) == 0.1:   # 50-segment value, converged to ~1 %

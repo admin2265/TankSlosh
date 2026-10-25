@@ -30,7 +30,7 @@ import numpy as np  # noqa: E402
 from .cases import Case, load_case  # noqa: E402
 from .diaphragm_static import DiaphragmStatics  # noqa: E402
 from .inputs import time_grid, trapezoid_pulse, vector_input  # noqa: E402
-from .modal import emm_table  # noqa: E402
+from .modal import capture_columns, emm_table  # noqa: E402
 from .simulate import simulate_prescribed  # noqa: E402
 
 
@@ -60,19 +60,28 @@ def statics_rows(case: Case, sols):
             for s in sols]
 
 
+def _cutoff_text(case: Case) -> str:
+    return f" (heaviest below {case.f_max_hz:g} Hz)" if case.f_max_hz else " (lowest frequency)"
+
+
 def mode_rows(case: Case, lat, ax):
+    # the same kept counts as emm_table: equal at every fill
+    fm = case.f_max_hz
+    n_lat = min(min(len(lm.dominant(case.n_keep_lateral, f_max=fm)) for lm in lat), case.n_keep_lateral)
+    n_ax = min(min(len(am.dominant(case.n_keep_axial, f_max=fm)) for am in ax), case.n_keep_axial)
     rows = []
     for lm, am in zip(lat, ax):
         row = dict(fill=lm.fill, contents_kg=lm.contents_mass, cg_z_m=lm.contents_cg_z,
                    stable=lm.stable, mesh_volume_error=lm.mesh_volume_error)
-        for j, i in enumerate(lm.dominant(case.n_keep_lateral), 1):
+        for j, i in enumerate(lm.dominant(n_lat, f_max=fm), 1):
             row[f"f{j}_hz"] = lm.freq_hz[i]
             row[f"m{j}_frac"] = lm.slosh_mass[i] / lm.contents_mass
             row[f"h{j}_m"] = lm.height[i]
-        for j, i in enumerate(am.dominant(case.n_keep_axial), 1):
+        for j, i in enumerate(am.dominant(n_ax, f_max=fm), 1):
             row[f"ax{j}_hz"] = am.freq_hz[i]
             row[f"ax{j}_frac"] = am.slosh_mass[i] / am.contents_mass
         row["axial_stable"] = am.stable
+        row.update(capture_columns(lm, am, n_lat, n_ax, fm))
         rows.append(row)
     return rows
 
@@ -118,20 +127,44 @@ def plot_statics(case: Case, sols, rows, path):
     plt.close(fig)
 
 
+SHOW = 0.02   # plots and results.md list kept modes carrying at least this fraction of the contents
+
+
+def _mode_scatter(case: Case, a, rows, pf, pm, n):
+    """Kept-mode frequencies vs fill, marker area proportional to slosh mass."""
+    for r in rows:
+        fm = [(r[f"{pf}{j}_hz"], r[f"{pm}{j}_frac"]) for j in range(1, n + 1) if f"{pf}{j}_hz" in r]
+        if fm:
+            fr, m = np.array(fm).T
+            a.scatter(np.full(len(fr), r["fill"]), fr, s=5 + 400 * m, c="C0", alpha=0.6)
+    a.scatter([], [], c="C0", alpha=0.6, label="kept modes (area ~ slosh mass)")
+    if case.f_max_hz:
+        a.axhline(case.f_max_hz, color="k", lw=0.8, ls="--", label=f"selection cutoff {case.f_max_hz:g} Hz")
+    a.set_yscale("log")
+    a.set_ylabel("frequency [Hz]")
+
+
+def _capture_lines(a, f, rows, tag):
+    a.plot(f, [100 * r[f"{tag}_kept_frac"] for r in rows], "o-", label="kept modes")
+    a.plot(f, [100 * r[f"{tag}_all_frac"] for r in rows], "s--", label="all stable modes")
+    a.set_ylabel("captured slosh mass [% of contents]")
+    a.set_ylim(0, 100)
+
+
 def plot_lateral(case: Case, rows, table, title, path):
     f = np.array([r["fill"] for r in rows])
     fig, axs = plt.subplots(3, 1, sharex=True, figsize=(8, 9))
-    for j in range(1, case.n_keep_lateral + 1):
-        axs[0].plot(f, [r.get(f"f{j}_hz", np.nan) for r in rows], "o-", label=f"mode {j}")
-        axs[1].plot(f, [100 * r.get(f"m{j}_frac", np.nan) for r in rows], "o-", label=f"mode {j}")
-        axs[2].plot(f, [r.get(f"h{j}_m", np.nan) for r in rows], "o-", label=f"mode {j}")
-    tf = table.fills
-    axs[1].plot(tf, [100 * (1 - p.fixed_mass / p.liquid_mass) for p in table.entries], "k--",
-                label="sum of kept modes")
-    axs[0].set_ylabel("frequency [Hz]")
-    axs[1].set_ylabel("slosh mass [% of contents]")
+    _mode_scatter(case, axs[0], rows, "f", "m", case.n_keep_lateral)
+    _capture_lines(axs[1], f, rows, "lat")
+    for r in rows:
+        hm = [(r[f"h{j}_m"], r[f"m{j}_frac"]) for j in range(1, case.n_keep_lateral + 1)
+              if f"h{j}_m" in r and r[f"m{j}_frac"] >= SHOW]
+        if hm:
+            h, m = np.array(hm).T
+            axs[2].scatter(np.full(len(h), r["fill"]), h, s=400 * m, c="C0", alpha=0.6)
+    axs[2].scatter([], [], c="C0", alpha=0.6, label=f"kept modes >= {SHOW:.0%} (area ~ slosh mass)")
     axs[2].plot(f, [r["cg_z_m"] for r in rows], "k:", label="contents CG")
-    axs[2].set_ylabel("height z [m]")
+    axs[2].set_ylabel("slosh height z [m]")
     axs[2].set_xlabel("fill fraction")
     unstable = [r["fill"] for r in rows if not (r["stable"] and r["axial_stable"])]
     for a in axs:
@@ -148,11 +181,8 @@ def plot_lateral(case: Case, rows, table, title, path):
 def plot_axial(case: Case, rows, title, path):
     f = np.array([r["fill"] for r in rows])
     fig, axs = plt.subplots(2, 1, sharex=True, figsize=(8, 6))
-    for j in range(1, case.n_keep_axial + 1):
-        axs[0].plot(f, [r.get(f"ax{j}_hz", np.nan) for r in rows], "o-", label=f"axial mode {j}")
-        axs[1].plot(f, [100 * r.get(f"ax{j}_frac", np.nan) for r in rows], "o-", label=f"axial mode {j}")
-    axs[0].set_ylabel("frequency [Hz]")
-    axs[1].set_ylabel("slosh mass [% of contents]")
+    _mode_scatter(case, axs[0], rows, "ax", "ax", case.n_keep_axial)
+    _capture_lines(axs[1], f, rows, "ax")
     axs[1].set_xlabel("fill fraction")
     for a in axs:
         a.legend(fontsize=8)
@@ -196,7 +226,7 @@ def plot_pulse(case: Case, table, path):
 def _modes_text(rows, prefix_f, prefix_m, n):
     parts = []
     for j in range(1, n + 1):
-        if f"{prefix_f}{j}_hz" in rows:
+        if f"{prefix_f}{j}_hz" in rows and rows[f"{prefix_m}{j}_frac"] >= SHOW:
             pct = 100 * rows[f"{prefix_m}{j}_frac"]
             parts.append(f"{rows[f'{prefix_f}{j}_hz']:.2f} Hz ({pct:.0f} %)" if pct >= 9.5 else
                          f"{rows[f'{prefix_f}{j}_hz']:.2f} Hz ({pct:.1f} %)")
@@ -204,17 +234,30 @@ def _modes_text(rows, prefix_f, prefix_m, n):
 
 
 def _modes_table(case: Case, rows):
-    lines = ["| Fill | Lateral modes (slosh mass) | Axial modes (slosh mass) | Stable |",
-             "|---|---|---|---|"]
+    lines = ["| Fill | Lateral modes (slosh mass) | Axial modes (slosh mass) | Captured lateral, axial "
+             "(kept / all modes) | Stable |",
+             "|---|---|---|---|---|"]
     for r in rows:
         stable = r["stable"] and r["axial_stable"]
         lines.append(f"| {r['fill']:.0%} | {_modes_text(r, 'f', 'm', case.n_keep_lateral)} | "
-                     f"{_modes_text(r, 'ax', 'ax', case.n_keep_axial)} | "
+                     f"{_modes_text(r, 'ax', 'ax', case.n_keep_axial)} | {_capture_text(r)} | "
                      f"{'yes' if stable else '**no**'} |")
     unstable = [f"{r['fill']:.0%}" for r in rows if not (r["stable"] and r["axial_stable"])]
     lines.append("")
     lines.append("Unstable fills (left out of the parameter table): " + (", ".join(unstable) or "none") + ".")
+    lines.append("")
+    lines.append(f"Mode columns list the kept modes carrying at least {SHOW:.0%} of the contents; "
+                 "the CSV has every kept mode. Captured: slosh mass of the kept modes / of all stable "
+                 "modes, as % of the contents. Kept close to all means more modes would add little; "
+                 "the rest moves with the tank.")
     return lines
+
+
+def _capture_text(r):
+    if "lat_kept_frac" not in r:      # results from before the capture columns existed
+        return "–"
+    return (f"{100 * r['lat_kept_frac']:.0f} / {100 * r['lat_all_frac']:.0f} %, "
+            f"{100 * r['ax_kept_frac']:.1f} / {100 * r['ax_all_frac']:.1f} %")
 
 
 def _git_version(folder):
@@ -248,7 +291,7 @@ def _input_lines(case: Case):
               f"| Statics sweep step | max {case.sweep_max_step}, min {case.sweep_min_step} |",
               f"| Liquid mesh | {case.liquid_mesh} m |",
               f"| Self-contact of folded layers | {'on' if case.self_contact else 'off'} |",
-              f"| Modes kept | {case.n_keep_lateral} lateral, {case.n_keep_axial} axial |",
+              f"| Modes kept | {case.n_keep_lateral} lateral, {case.n_keep_axial} axial{_cutoff_text(case)} |",
               f"| Damping ζ | {case.zeta} (placeholder until fitted to CFD or test) |",
               f"| Mount point | {case.mount_point} m |"]
     return lines
@@ -342,7 +385,7 @@ def run_case(folder: str, out: str = None, fills=None, orbit=None, ground=None, 
     say = print if verbose else (lambda *a, **k: None)
     sweep = dict(max_step=case.sweep_max_step, min_step=case.sweep_min_step)
     common = dict(n_keep_lat=case.n_keep_lateral, n_keep_ax=case.n_keep_axial, zeta=case.zeta,
-                  h_mesh=case.liquid_mesh, fluid=case.fluid)
+                  h_mesh=case.liquid_mesh, fluid=case.fluid, f_max=case.f_max_hz)
     results = {}
     t_start = time.perf_counter()
 
@@ -363,7 +406,8 @@ def run_case(folder: str, out: str = None, fills=None, orbit=None, ground=None, 
         table, lat, ax, _ = emm_table(ds, case.fills, sols=sols, notes=f"Level B lateral + axial slosh modes, "
                                       f"case {case.name}, orbit (no gravity)", **common)
         say(f"[{case.name}] orbit modes in {time.perf_counter() - t0:.0f} s")
-        table.notes += (f"; {case.n_keep_lateral} lateral + {case.n_keep_axial} axial modes kept, "
+        table.notes += (f"; {len(table.entries[0].lateral_modes)} lateral + {len(table.entries[0].axial_modes)} axial "
+                        f"modes kept{_cutoff_text(case)}, "
                         f"zeta = {case.zeta} placeholder (fit to CFD)")
         table.save_json(os.path.join(out, "orbit_emm.json"))
         rows = mode_rows(case, lat, ax)
@@ -384,7 +428,8 @@ def run_case(folder: str, out: str = None, fills=None, orbit=None, ground=None, 
         table, lat, ax, _ = emm_table(ds, case.fills, sols=sols, notes=f"Level B lateral + axial slosh modes, "
                                       f"case {case.name}", **common)
         say(f"[{case.name}] 1-g statics + modes in {time.perf_counter() - t0:.0f} s")
-        table.notes += (f"; {case.n_keep_lateral} lateral + {case.n_keep_axial} axial modes kept, "
+        table.notes += (f"; {len(table.entries[0].lateral_modes)} lateral + {len(table.entries[0].axial_modes)} axial "
+                        f"modes kept{_cutoff_text(case)}, "
                         f"zeta = {case.zeta} placeholder; {case.g:g} m/s^2, gas on top (ground test). "
                         f"Level A runs need specific force z = +{case.g:g}")
         table.save_json(os.path.join(out, "ground_emm.json"))
